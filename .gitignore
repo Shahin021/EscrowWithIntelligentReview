@@ -1,0 +1,11 @@
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+artifacts/
+.venv/
+.tools/
+.asimov_escrow_address
+.escrow_*_snapshot.json
+.escrow_*_tx
+escrow_contract_before_claim_fix.py

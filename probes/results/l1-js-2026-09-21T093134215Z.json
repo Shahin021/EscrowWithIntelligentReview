@@ -1,0 +1,207 @@
+{
+  "at": "2026-09-21T09:31:34.215Z",
+  "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "sdk": "genlayer-js@1.1.8",
+  "reads": [
+    {
+      "functionName": "probe_dict",
+      "jsonSafeReturn": true,
+      "value": {
+        "big": "100000000000000000000",
+        "flag": true,
+        "nested": {
+          "big_str": "100000000000000000000",
+          "list": [
+            1,
+            2,
+            3
+          ]
+        },
+        "small": 7,
+        "text": "ok"
+      },
+      "js_types": {
+        "__type__": "Object",
+        "big": "string",
+        "flag": "boolean",
+        "nested": {
+          "__type__": "Object",
+          "big_str": "string",
+          "list": {
+            "__type__": "Array",
+            "items": [
+              "number",
+              "number",
+              "number"
+            ]
+          }
+        },
+        "small": "number",
+        "text": "string"
+      }
+    },
+    {
+      "functionName": "probe_dict",
+      "jsonSafeReturn": false,
+      "value": {
+        "big": "100000000000000000000n",
+        "flag": true,
+        "nested": {
+          "big_str": "100000000000000000000",
+          "list": [
+            "1n",
+            "2n",
+            "3n"
+          ]
+        },
+        "small": "7n",
+        "text": "ok"
+      },
+      "js_types": {
+        "__type__": "Map",
+        "big": "bigint",
+        "flag": "boolean",
+        "nested": {
+          "__type__": "Map",
+          "big_str": "string",
+          "list": {
+            "__type__": "Array",
+            "items": [
+              "bigint",
+              "bigint",
+              "bigint"
+            ]
+          }
+        },
+        "small": "bigint",
+        "text": "string"
+      }
+    },
+    {
+      "functionName": "probe_list",
+      "jsonSafeReturn": true,
+      "value": [
+        {
+          "amount": "100000000000000000000",
+          "i": 0
+        },
+        {
+          "amount": 1,
+          "i": 1
+        }
+      ],
+      "js_types": {
+        "__type__": "Array",
+        "items": [
+          {
+            "__type__": "Object",
+            "amount": "string",
+            "i": "number"
+          },
+          {
+            "__type__": "Object",
+            "amount": "number",
+            "i": "number"
+          }
+        ]
+      }
+    },
+    {
+      "functionName": "probe_list",
+      "jsonSafeReturn": false,
+      "value": [
+        {
+          "amount": "100000000000000000000n",
+          "i": "0n"
+        },
+        {
+          "amount": "1n",
+          "i": "1n"
+        }
+      ],
+      "js_types": {
+        "__type__": "Array",
+        "items": [
+          {
+            "__type__": "Map",
+            "amount": "bigint",
+            "i": "bigint"
+          },
+          {
+            "__type__": "Map",
+            "amount": "bigint",
+            "i": "bigint"
+          }
+        ]
+      }
+    },
+    {
+      "functionName": "probe_typed_dict",
+      "jsonSafeReturn": true,
+      "value": {
+        "a": 1,
+        "big": "100000000000000000000"
+      },
+      "js_types": {
+        "__type__": "Object",
+        "a": "number",
+        "big": "string"
+      }
+    },
+    {
+      "functionName": "probe_typed_dict",
+      "jsonSafeReturn": false,
+      "value": {
+        "a": "1n",
+        "big": "100000000000000000000n"
+      },
+      "js_types": {
+        "__type__": "Map",
+        "a": "bigint",
+        "big": "bigint"
+      }
+    },
+    {
+      "functionName": "probe_typed_list",
+      "jsonSafeReturn": true,
+      "value": [
+        "x",
+        "y"
+      ],
+      "js_types": {
+        "__type__": "Array",
+        "items": [
+          "string",
+          "string"
+        ]
+      }
+    },
+    {
+      "functionName": "probe_typed_list",
+      "jsonSafeReturn": false,
+      "value": [
+        "x",
+        "y"
+      ],
+      "js_types": {
+        "__type__": "Array",
+        "items": [
+          "string",
+          "string"
+        ]
+      }
+    },
+    {
+      "functionName": "probe_json",
+      "jsonSafeReturn": true,
+      "value": "{\"big\":\"100000000000000000000\",\"small\":\"7\"}",
+      "js_types": "string"
+    },
+    {
+      "functionName": "probe_json",
+      "jsonSafeReturn": false,
+      "value": "{\"big\":\"100000000000000000000\",\"small\":\"7\"}",
+      "js_types": "string"
+    }
+  ]
+}

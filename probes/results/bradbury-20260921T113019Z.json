@@ -1,0 +1,127 @@
+{
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T11:30:19.043384+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T11:30:19.047384+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T11:30:19.047860+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T11:30:20.850604+00:00",
+      "probe": "L8",
+      "python_types": {
+        "__type__": "list",
+        "items": []
+      },
+      "step": "read B_pings_before",
+      "value": []
+    },
+    {
+      "args": [
+        "0x02a6BA576783B410B9A2621776361d7fce7378c2"
+      ],
+      "at": "2026-09-21T11:30:24.465619+00:00",
+      "probe": "L8",
+      "step": "write ping:submitted",
+      "tx": "0x868a83510fc23c791419ac55c8b0c53261d7d95d390b53847d3c242635a72304",
+      "value": "0"
+    },
+    {
+      "at": "2026-09-21T11:30:43.736752+00:00",
+      "probe": "L8",
+      "receipt": {
+        "activator": "0x59dc5e6fd7428c5ee6fc24ae2b99e5860a9c9499",
+        "epoch": 160,
+        "eqBlocksOutputs": "c786706164646564",
+        "id": "0x868a83510fc23c791419ac55c8b0c53261d7d95d390b53847d3c242635a72304",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0xec41b0137358bf9134d5d4419d5b69e35e07322b522580d4e8783e296e09691b",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22469718,
+            "ProcessingBlock": 22469718,
+            "ProposalBlock": 22469720
+          }
+        ],
+        "recipient": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+        "result": 1,
+        "resultHash": "0x45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 4,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x9f6aa7364d20cf25f054ea83f3cb950317fd34b6",
+              "0xa58d6fccd69eaafb5869da58913f116045d75444",
+              "0xf01877b6ac60861ca3b134e0e483c482679b4682",
+              "0xe8fdefdfe18fd8e5b0d576b7ccfc5a29ce43fd7f",
+              "0xfd811b16001077243e07173ec72a4735ff04c3aa"
+            ],
+            "validatorResultHash": [
+              "45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36",
+              "45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36",
+              "45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36",
+              "45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36",
+              "45101126b8610a410c0fef09ff2327490302a20cda1665c68d685ec16909af36"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "1538ca51766335b25a092215bb0a6bd1b532baa7b0200509f198a00fa4da47fa",
+              "4d0ed61f103165677452ff0812b4bcdec41df3b867e2c84c3a09d0e21cc08329",
+              "bc39560945285b89139bc5ba833176578fd94343cd10f852e4f7ab3983d36f9b",
+              "d4048e34683f5dbe933496d19ca98566316e79dac3b08eec6081ed37828b9451",
+              "0f204eaea84b1ec1b554187ad994b1e557317d607325fe2ef4de3e265c5365cb"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789990223,
+          "AppealSubmitted": 0,
+          "Committed": 1789990232,
+          "Created": 1789990223,
+          "LastVote": 1789990236,
+          "LeaderRevealed": 1789990234,
+          "Pending": 1789990223,
+          "Proposed": 1789990228
+        },
+        "txCallData": "f842b83f1604617267730dd402307830326136424135373637383342343130423941323632313737363336316437666365373337386332066d6574686f642470696e6780",
+        "txExecutionHash": "0xf18e897cd52aa296113d37bcadfe56038ff449cc406a20dd1bdf0af8b54c2894",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 12,
+        "validUntil": 0
+      },
+      "seconds": 19.3,
+      "step": "write ping:ACCEPTED",
+      "tx": "0x868a83510fc23c791419ac55c8b0c53261d7d95d390b53847d3c242635a72304"
+    },
+    {
+      "at": "2026-09-21T11:30:43.745124+00:00",
+      "note": "Do not rerun L8. Check this tx later, then read B.get_pings.",
+      "probe": "L8",
+      "step": "ping_submitted"
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

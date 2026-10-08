@@ -1,0 +1,48 @@
+{
+  "finished_at": "2026-09-21T09:07:33.654950+00:00",
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T09:07:30.019398+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T09:07:30.039493+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T09:07:30.039493+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T09:07:31.911108+00:00",
+      "probe": "L7",
+      "python_types": "str",
+      "step": "read load_before_store",
+      "value": "{\"kv\": \"hello\", \"last_amount\": \"100000000000000000000\", \"last_i\": 1, \"last_s\": \"hello\", \"records\": 2}"
+    },
+    {
+      "at": "2026-09-21T09:07:31.913125+00:00",
+      "last_amount": "100000000000000000000",
+      "last_i": 1,
+      "last_s": "hello",
+      "probe": "L7",
+      "records": 2,
+      "step": "store skipped:already_present",
+      "value": "{\"kv\": \"hello\", \"last_amount\": \"100000000000000000000\", \"last_i\": 1, \"last_s\": \"hello\", \"records\": 2}"
+    },
+    {
+      "at": "2026-09-21T09:07:33.652938+00:00",
+      "probe": "L7",
+      "python_types": "str",
+      "step": "read load",
+      "value": "{\"kv\": \"hello\", \"last_amount\": \"100000000000000000000\", \"last_i\": 1, \"last_s\": \"hello\", \"records\": 2}"
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

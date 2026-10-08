@@ -1,0 +1,42 @@
+name: dApp verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dapp/**"
+      - ".github/workflows/dapp-pages.yml"
+  pull_request:
+    paths:
+      - "dapp/**"
+      - ".github/workflows/dapp-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dapp/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Build Bradbury dashboard
+        env:
+          VITE_GENLAYER_NETWORK: testnetBradbury
+          VITE_ESCROW_ADDRESS: "0x9304455A1Bad15A6317E1d4de92c9b599bae246C"
+          VITE_REGISTRY_ADDRESS: "0x33c5A0F51Ed10Ee21dC55399ce4A37D525321f99"
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dapp-dist
+          path: dapp/dist

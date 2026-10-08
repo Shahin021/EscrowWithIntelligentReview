@@ -1,0 +1,122 @@
+{
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T11:27:07.810787+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T11:27:07.813788+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T11:27:07.813788+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T11:27:09.685760+00:00",
+      "probe": "L4",
+      "python_types": "str",
+      "step": "read deposits_total_before",
+      "value": "0"
+    },
+    {
+      "args": [],
+      "at": "2026-09-21T11:27:13.476204+00:00",
+      "probe": "L4",
+      "step": "write deposit:submitted",
+      "tx": "0xb71b535514cd64c35c71943a0ecaadf9b38adb732e36e9f32b48db323d936016",
+      "value": "3000000000000000"
+    },
+    {
+      "at": "2026-09-21T11:27:26.728904+00:00",
+      "probe": "L4",
+      "receipt": {
+        "activator": "0xb7551bef37a05995218f9a1bb7a93e5b6705f535",
+        "epoch": 160,
+        "eqBlocksOutputs": "c786706164646564",
+        "id": "0xb71b535514cd64c35c71943a0ecaadf9b38adb732e36e9f32b48db323d936016",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0x3cddaa9d6de1cc0e01edcc94b360d30a68ee2a516e661262441de2cd2fd1dcfb",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22469664,
+            "ProcessingBlock": 22469664,
+            "ProposalBlock": 22469665
+          }
+        ],
+        "recipient": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+        "result": 1,
+        "resultHash": "0x7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 3,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x2d012a292244c7ce6423a114d19109990923af76",
+              "0xfd811b16001077243e07173ec72a4735ff04c3aa",
+              "0x58a7b7ac6cb01843e4e5af117c551e59449e0f49",
+              "0x9d998ad7c7f9cc448a4dbdf49edd7cadbe3d57b6",
+              "0xe8fdefdfe18fd8e5b0d576b7ccfc5a29ce43fd7f"
+            ],
+            "validatorResultHash": [
+              "7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc",
+              "7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc",
+              "7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc",
+              "7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc",
+              "7cf423dc44d32e6a43210be7f1bc82cdf41ca07aca1faf9f42751264c89ef9dc"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "24b2c7138fd2441c01b5005029e012264ddd6000de340869b2a2c1ddf8e6a71d",
+              "153bc3cb009082090adff63b4d0fbb05b3b41eeb88a382794e2c2c4711cda304",
+              "4f0c7866786efa697ad37b679607e73f816f6823f5fe0659176b0b035017ca1c",
+              "aa8e2d1e894367f18111fd27902704e81d30072bf6ae6c62aca3c48adad1c0be",
+              "e3d8925fb4b5244f2584cb07273673765a0471e708415d7b92e03be62bab1aa1"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789990033,
+          "AppealSubmitted": 0,
+          "Committed": 1789990038,
+          "Created": 1789990032,
+          "LastVote": 1789990042,
+          "LeaderRevealed": 1789990040,
+          "Pending": 1789990032,
+          "Proposed": 1789990035
+        },
+        "txCallData": "d2900e066d6574686f643c6465706f73697480",
+        "txExecutionHash": "0x206b3f30ef410f16ab8ee69d6546c3d75ddf56691da2e114cdd29a707f543942",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 11,
+        "validUntil": 0
+      },
+      "seconds": 13.3,
+      "step": "write deposit:ACCEPTED",
+      "tx": "0xb71b535514cd64c35c71943a0ecaadf9b38adb732e36e9f32b48db323d936016"
+    },
+    {
+      "at": "2026-09-21T11:27:26.733153+00:00",
+      "note": "Do not resubmit funding. Wait for this tx to finalize while running other probes.",
+      "probe": "L4",
+      "step": "stage1_funding_submitted"
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

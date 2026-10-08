@@ -1,0 +1,129 @@
+{
+  "finished_at": "2026-09-21T09:08:29.031979+00:00",
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T09:08:19.512218+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T09:08:19.515218+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T09:08:19.515218+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T09:08:21.203839+00:00",
+      "probe": "L1",
+      "python_types": {
+        "__type__": "dict",
+        "big": "int",
+        "flag": "bool",
+        "nested": {
+          "__type__": "dict",
+          "big_str": "str",
+          "list": {
+            "__type__": "list",
+            "items": [
+              "int",
+              "int",
+              "int"
+            ]
+          }
+        },
+        "small": "int",
+        "text": "str"
+      },
+      "step": "read probe_dict",
+      "value": {
+        "big": 100000000000000000000,
+        "flag": true,
+        "nested": {
+          "big_str": "100000000000000000000",
+          "list": [
+            1,
+            2,
+            3
+          ]
+        },
+        "small": 7,
+        "text": "ok"
+      }
+    },
+    {
+      "at": "2026-09-21T09:08:22.854852+00:00",
+      "probe": "L1",
+      "python_types": {
+        "__type__": "list",
+        "items": [
+          {
+            "__type__": "dict",
+            "amount": "int",
+            "i": "int"
+          },
+          {
+            "__type__": "dict",
+            "amount": "int",
+            "i": "int"
+          }
+        ]
+      },
+      "step": "read probe_list",
+      "value": [
+        {
+          "amount": 100000000000000000000,
+          "i": 0
+        },
+        {
+          "amount": 1,
+          "i": 1
+        }
+      ]
+    },
+    {
+      "at": "2026-09-21T09:08:25.025635+00:00",
+      "probe": "L1",
+      "python_types": {
+        "__type__": "dict",
+        "a": "int",
+        "big": "int"
+      },
+      "step": "read probe_typed_dict",
+      "value": {
+        "a": 1,
+        "big": 100000000000000000000
+      }
+    },
+    {
+      "at": "2026-09-21T09:08:27.181601+00:00",
+      "probe": "L1",
+      "python_types": {
+        "__type__": "list",
+        "items": [
+          "str",
+          "str"
+        ]
+      },
+      "step": "read probe_typed_list",
+      "value": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "at": "2026-09-21T09:08:29.030445+00:00",
+      "probe": "L1",
+      "python_types": "str",
+      "step": "read probe_json",
+      "value": "{\"big\":\"100000000000000000000\",\"small\":\"7\"}"
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

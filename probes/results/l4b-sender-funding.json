@@ -1,0 +1,9 @@
+{
+  "at": "2026-09-24T08:00:55.424506+00:00",
+  "tx": "0xb5bebcc12fda930d70327259544146bec7daa2bb6a9454a017c747d2653b0507",
+  "contract": "0xfe56f05dc0538c4b3912c63137c5c4d7370833b0",
+  "amount": "2000000000000000",
+  "status": 5,
+  "result": 1,
+  "txExecutionResult": 1
+}

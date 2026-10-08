@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-09-22T20:30:01.001066+00:00",
+  "contract": "0x1a59528a114e10e3d4507d48185ba6dcc8f1eebc",
+  "amount": "1000000000000000",
+  "tx": "0xb2d2f254156ff1fe9b9a6aaa5dad34ef4b0483ea1c7a58bac0d7830f4b7a9c04",
+  "status": 5,
+  "result": 1,
+  "txExecutionResult": 1
+}

@@ -1,0 +1,15 @@
+{
+  "observed_at": "2026-09-24T10:29:27.278725+00:00",
+  "sender_contract": "0xfe56f05dc0538c4b3912c63137c5c4d7370833b0",
+  "receiver_contract": "0xe8e28d3e014c9dc5890efdf21500d2877dde31fa",
+  "amount": "1000000000000000",
+  "gas_estimates": [
+    {
+      "estimated": 891955,
+      "padded": 2000000
+    }
+  ],
+  "outer_evm_hash": "0xbe9619818306b1077e19e0083bfca727f6ade741089b51a7bf1dd7791e99c4be",
+  "genlayer_tx": "0xbc60450623cb43d63e32b58aa6e7e8678dd6ce187d6938b90afdc8ba8d46c760",
+  "error": null
+}

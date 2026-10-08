@@ -1,0 +1,16 @@
+﻿{
+    "observed_at":  "2026-09-22T22:54:24.3455947Z",
+    "probe":  "L5b external EOA transfer",
+    "contract":  "0x1a59528a114e10e3d4507d48185ba6dcc8f1eebc",
+    "recipient":  "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+    "amount":  "1000000000000000",
+    "outer_evm_tx":  "0x1715f22e77d6e3f65991789608ce228499b049e9b22a2335c07917ac6f7372f8",
+    "genlayer_tx":  "0x35bfb1e5ecfe635a16bee14db26f322ef90d21b983865a663c5aa33ebb1b2ef7",
+    "status":  "Finalized",
+    "statusCode":  7,
+    "result":  1,
+    "txExecutionResult":  1,
+    "balance_before":  "1000000000000000",
+    "balance_after":  "0",
+    "funded_total":  "1000000000000000"
+}

@@ -1,0 +1,129 @@
+{
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T11:54:40.628565+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T11:54:40.631074+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T11:54:40.632076+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T11:54:42.491083+00:00",
+      "probe": "L5",
+      "python_types": "str",
+      "step": "read B_balance_before_fund",
+      "value": "0"
+    },
+    {
+      "at": "2026-09-21T11:54:44.188845+00:00",
+      "probe": "L5",
+      "python_types": "str",
+      "step": "read B_deposits_before_fund",
+      "value": "0"
+    },
+    {
+      "args": [],
+      "at": "2026-09-21T11:54:48.100457+00:00",
+      "probe": "L5",
+      "step": "write deposit:submitted",
+      "tx": "0x5e11aa1148470f6437a2016d72deff33ab49e7a7ebe2dbe347b681eb56ae4c59",
+      "value": "2000000000000000"
+    },
+    {
+      "at": "2026-09-21T11:55:06.555514+00:00",
+      "probe": "L5",
+      "receipt": {
+        "activator": "0x2cd9051e10cd1547a7b64ef61ebf1e608235dbda",
+        "epoch": 160,
+        "eqBlocksOutputs": "c786706164646564",
+        "id": "0x5e11aa1148470f6437a2016d72deff33ab49e7a7ebe2dbe347b681eb56ae4c59",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0xd726bb773371467a3773688cfb56209bb24bff49efefd1cb16b38b678763ed75",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22470120,
+            "ProcessingBlock": 22470120,
+            "ProposalBlock": 22470121
+          }
+        ],
+        "recipient": "0x02a6ba576783b410b9a2621776361d7fce7378c2",
+        "result": 1,
+        "resultHash": "0xd7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 4,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x4fc292d5d255ec8ad4cdcd36c5e188dfee9d160e",
+              "0x4cd1ab61867487f45988db08eb18bd00e20c518a",
+              "0x3b940a5b4a762583453d9e9cf0981be0426a8e79",
+              "0xa58d6fccd69eaafb5869da58913f116045d75444",
+              "0xe8fdefdfe18fd8e5b0d576b7ccfc5a29ce43fd7f"
+            ],
+            "validatorResultHash": [
+              "d7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf",
+              "d7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf",
+              "d7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf",
+              "d7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf",
+              "d7f140d2fe351b5d758ce8a8fc28b2340492e783cca62a2ae63b271668c3fbcf"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "725752ed1b46864c8a8459a7102ddb295c7aeb61e1363ad5e19b58c1ae059745",
+              "047bc4c511d4c26b3d82149b5b11e17c1b912a220a7080a560c1c95a8af405d6",
+              "f6d7b5a619d98ce530ee58e0b5bcc9ed52d4c4b9f3781139a2302581f331c477",
+              "dec4a8dc921f180d02532e493a0e635d0494019f30c8cbaf94c52d400113fa2c",
+              "09f4d1d8348d008d91aa8706069273e5667e97dabb624c76022791fd4db10dfa"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789991689,
+          "AppealSubmitted": 0,
+          "Committed": 1789991697,
+          "Created": 1789991687,
+          "LastVote": 1789991699,
+          "LeaderRevealed": 1789991698,
+          "Pending": 1789991687,
+          "Proposed": 1789991693
+        },
+        "txCallData": "d2900e066d6574686f643c6465706f73697480",
+        "txExecutionHash": "0x270216ce60e2fbda9c1ef5434de4f221297918c58e3cf3ec3f20a74591153dc9",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 1,
+        "validUntil": 0
+      },
+      "seconds": 18.5,
+      "step": "write deposit:ACCEPTED",
+      "tx": "0x5e11aa1148470f6437a2016d72deff33ab49e7a7ebe2dbe347b681eb56ae4c59"
+    },
+    {
+      "at": "2026-09-21T11:55:06.559730+00:00",
+      "note": "Do not rerun fund stage. Check tx status later.",
+      "probe": "L5",
+      "step": "stage1_funding_submitted"
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

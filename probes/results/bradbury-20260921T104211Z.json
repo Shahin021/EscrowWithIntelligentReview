@@ -1,0 +1,324 @@
+{
+  "finished_at": "2026-09-21T10:43:17.993247+00:00",
+  "l5_recipient": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "network": "testnet_bradbury",
+  "owner_address": "0xcC88888f2eeD5D8e457e6753FAaE64941dc33092",
+  "probe_A": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+  "probe_B": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+  "started_at": "2026-09-21T10:42:11.494289+00:00",
+  "steps": [
+    {
+      "address": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+      "at": "2026-09-21T10:42:11.511020+00:00",
+      "probe": "deploy",
+      "step": "reuse A"
+    },
+    {
+      "address": "0x02a6BA576783B410B9A2621776361d7fce7378c2",
+      "at": "2026-09-21T10:42:11.511020+00:00",
+      "probe": "deploy",
+      "step": "reuse B"
+    },
+    {
+      "at": "2026-09-21T10:42:11.512018+00:00",
+      "probe": "L6",
+      "step": "url github_redirect",
+      "url": "https://github.com/Shahin021/Escrow/raw/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html"
+    },
+    {
+      "args": [
+        "https://github.com/Shahin021/Escrow/raw/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html"
+      ],
+      "at": "2026-09-21T10:42:15.424249+00:00",
+      "probe": "L6",
+      "step": "write fetch:submitted",
+      "tx": "0xe4a2dade124534b75833807634861cdb266fe578a117c8c382c2d83ff7ee3483",
+      "value": "0"
+    },
+    {
+      "at": "2026-09-21T10:42:34.741700+00:00",
+      "probe": "L6",
+      "receipt": {
+        "activator": "0x59dc5e6fd7428c5ee6fc24ae2b99e5860a9c9499",
+        "epoch": 160,
+        "eqBlocksOutputs": "f901deb901d4002e0c6865616465725f6e616d6573bd016c6163636570742d72616e676573dc016163636573732d636f6e74726f6c2d616c6c6f772d6f726967696e6c63616368652d636f6e74726f6cbc01636f6e74656e742d73656375726974792d706f6c69637964636f6e74656e742d74797065e40163726f73732d6f726967696e2d7265736f757263652d706f6c696379246461746524657461673c6578706972657354736f757263652d616765cc017374726963742d7472616e73706f72742d736563757269747924766172791c7669613c782d636163686564782d63616368652d68697473b401782d636f6e74656e742d747970652d6f7074696f6e739c01782d666173746c792d726571756573742d69647c782d6672616d652d6f7074696f6e73a401782d6769746875622d656467652d726567696f6e9c01782d6769746875622d726571756573742d69645c782d7365727665642d62793c782d74696d65728401782d7873732d70726f74656374696f6e066b656363616b840435633731376231643761653037643530366538616433393564303366663530666563373366333833636631313231386334626266393931353335656664306332036c656eb123086c6f636174696f6e0406737461747573c10c86706164646564",
+        "id": "0xe4a2dade124534b75833807634861cdb266fe578a117c8c382c2d83ff7ee3483",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0x44e904b356a1cef975ee3b012c564c2415900e4d9fb3869401cb7df13b4137bc",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22468906,
+            "ProcessingBlock": 22468906,
+            "ProposalBlock": 22468907
+          }
+        ],
+        "recipient": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+        "result": 1,
+        "resultHash": "0xa77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 1,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x2cd9051e10cd1547a7b64ef61ebf1e608235dbda",
+              "0x3b940a5b4a762583453d9e9cf0981be0426a8e79",
+              "0x4cd1ab61867487f45988db08eb18bd00e20c518a",
+              "0xb7551bef37a05995218f9a1bb7a93e5b6705f535",
+              "0x470aaa7de37ff3e1c2b38ed9096263ca0d541f21"
+            ],
+            "validatorResultHash": [
+              "a77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6",
+              "a77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6",
+              "a77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6",
+              "a77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6",
+              "a77b2f7f145d8ba5f970355124a0c993ef9e29e38515e328b1239957b0d373d6"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "f57d27c6ba6b53eaccd6bd768149a6dc1b6b585507618ac0ad139c23693d2ef0",
+              "004476fadb82502b9c5918e68e2df1c2448a12d1579dda0a81f32cbd86cfb328",
+              "3883d2a5bca2d37c68168d7b95511d6f4e6862f9a756e9cacf0c271fede65fea",
+              "a98dbd20d74c98af5c0cfb05a1b1f05c786cd13c6c59373253cb803d1d8bda9e",
+              "31ac91790e685b1ee7a2b64cafaf6c80f136b1051623b4acde7b7f95d75ec48c"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789987335,
+          "AppealSubmitted": 0,
+          "Committed": 1789987344,
+          "Created": 1789987334,
+          "LastVote": 1789987348,
+          "LeaderRevealed": 1789987346,
+          "Pending": 1789987334,
+          "Proposed": 1789987339
+        },
+        "txCallData": "f882b87f1604617267730dcc0668747470733a2f2f6769746875622e636f6d2f53686168696e3032312f457363726f772f7261772f346665666566366131643739306132666233396136326139333765373638353263366362373738632f65766964656e63652f6e6f76615f76616c69642e68746d6c066d6574686f642c666574636880",
+        "txExecutionHash": "0x2d116c0d95a0d562b53e6e719db2e02da61a0a2055bc64572af49bc89c1a684a",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 8,
+        "validUntil": 0
+      },
+      "seconds": 19.3,
+      "step": "write fetch:ACCEPTED",
+      "tx": "0xe4a2dade124534b75833807634861cdb266fe578a117c8c382c2d83ff7ee3483"
+    },
+    {
+      "at": "2026-09-21T10:42:34.749376+00:00",
+      "probe": "L6",
+      "step": "url raw_direct",
+      "url": "https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html"
+    },
+    {
+      "args": [
+        "https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html"
+      ],
+      "at": "2026-09-21T10:42:38.673535+00:00",
+      "probe": "L6",
+      "step": "write fetch:submitted",
+      "tx": "0x5063d1e2219aebb9ce2949a66211ad87bcf206b39bd772fdb7f86d6e28a8c4e0",
+      "value": "0"
+    },
+    {
+      "at": "2026-09-21T10:42:57.360057+00:00",
+      "probe": "L6",
+      "receipt": {
+        "activator": "0xa58d6fccd69eaafb5869da58913f116045d75444",
+        "epoch": 160,
+        "eqBlocksOutputs": "f901deb901d4002e0c6865616465725f6e616d6573bd016c6163636570742d72616e676573dc016163636573732d636f6e74726f6c2d616c6c6f772d6f726967696e6c63616368652d636f6e74726f6cbc01636f6e74656e742d73656375726974792d706f6c69637964636f6e74656e742d74797065e40163726f73732d6f726967696e2d7265736f757263652d706f6c696379246461746524657461673c6578706972657354736f757263652d616765cc017374726963742d7472616e73706f72742d736563757269747924766172791c7669613c782d636163686564782d63616368652d68697473b401782d636f6e74656e742d747970652d6f7074696f6e739c01782d666173746c792d726571756573742d69647c782d6672616d652d6f7074696f6e73a401782d6769746875622d656467652d726567696f6e9c01782d6769746875622d726571756573742d69645c782d7365727665642d62793c782d74696d65728401782d7873732d70726f74656374696f6e066b656363616b840435633731376231643761653037643530366538616433393564303366663530666563373366333833636631313231386334626266393931353335656664306332036c656eb123086c6f636174696f6e0406737461747573c10c86706164646564",
+        "id": "0x5063d1e2219aebb9ce2949a66211ad87bcf206b39bd772fdb7f86d6e28a8c4e0",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0xea17724b7250344c710a1bd610c546a0efb9e72db9710eb0c60519eadece587a",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22468917,
+            "ProcessingBlock": 22468917,
+            "ProposalBlock": 22468918
+          }
+        ],
+        "recipient": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+        "result": 1,
+        "resultHash": "0x78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 1,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x422357d87b035e478777c84748bac834ce2a9597",
+              "0x96298d411a2d622945beaca6112374583b501d52",
+              "0x3b940a5b4a762583453d9e9cf0981be0426a8e79",
+              "0x27276953fa2052a5178ae5a3d114a3dfb9a2fc98",
+              "0x4cd1ab61867487f45988db08eb18bd00e20c518a"
+            ],
+            "validatorResultHash": [
+              "78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6",
+              "78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6",
+              "78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6",
+              "78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6",
+              "78550698cc0fd8d50cfd6a2731946e93e20f6322fc1fa27b7381c191b97736d6"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "8a5cd783ac4d729a0f835fda2defda37b2eb319608e2cd1491c7eecded1c457e",
+              "4f9eebe25691f9b5cddb13bddd3303eb43fbc76d6f9105ec9df51ea58d0f5f04",
+              "0fdd6322acbf66c63fc70afc4c0f7096bb30591e86bbc55af767567a380fab5d",
+              "18e6275a68e64ef828511ccfae2aab0886a6f9b65347f56267c37b58061ecdbe",
+              "9f4c41ad45340693f73002cc2e352c405515634ebcb9e66f4fe1dacbf7710428"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789987360,
+          "AppealSubmitted": 0,
+          "Committed": 1789987367,
+          "Created": 1789987357,
+          "LastVote": 1789987371,
+          "LeaderRevealed": 1789987369,
+          "Pending": 1789987357,
+          "Proposed": 1789987363
+        },
+        "txCallData": "f88db88a1604617267730da40768747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f53686168696e3032312f457363726f772f346665666566366131643739306132666233396136326139333765373638353263366362373738632f65766964656e63652f6e6f76615f76616c69642e68746d6c066d6574686f642c666574636880",
+        "txExecutionHash": "0xb2e2bb6228682fb5699ba205e58a57561275bfd1dc7f6f2d8331672bc04bf166",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 9,
+        "validUntil": 0
+      },
+      "seconds": 18.7,
+      "step": "write fetch:ACCEPTED",
+      "tx": "0x5063d1e2219aebb9ce2949a66211ad87bcf206b39bd772fdb7f86d6e28a8c4e0"
+    },
+    {
+      "at": "2026-09-21T10:42:57.367140+00:00",
+      "probe": "L6",
+      "step": "url raw_404",
+      "url": "https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/does_not_exist.html"
+    },
+    {
+      "args": [
+        "https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/does_not_exist.html"
+      ],
+      "at": "2026-09-21T10:43:01.060508+00:00",
+      "probe": "L6",
+      "step": "write fetch:submitted",
+      "tx": "0x0d3ac55159d251918d8cc86b71149d066c68f565c3f3acdba93b2d62b9781107",
+      "value": "0"
+    },
+    {
+      "at": "2026-09-21T10:43:16.261662+00:00",
+      "probe": "L6",
+      "receipt": {
+        "activator": "0x0c526a6af46a038e31da21c123756ab2d75f06bc",
+        "epoch": 160,
+        "eqBlocksOutputs": "f901d9b901cf002e0c6865616465725f6e616d6573b5016c6163636570742d72616e676573dc016163636573732d636f6e74726f6c2d616c6c6f772d6f726967696e74636f6e74656e742d6c656e677468bc01636f6e74656e742d73656375726974792d706f6c69637964636f6e74656e742d74797065e40163726f73732d6f726967696e2d7265736f757263652d706f6c69637924646174653c6578706972657354736f757263652d616765cc017374726963742d7472616e73706f72742d736563757269747924766172791c7669613c782d636163686564782d63616368652d68697473b401782d636f6e74656e742d747970652d6f7074696f6e739c01782d666173746c792d726571756573742d69647c782d6672616d652d6f7074696f6e73a401782d6769746875622d656467652d726567696f6e9c01782d6769746875622d726571756573742d69645c782d7365727665642d62793c782d74696d65728401782d7873732d70726f74656374696f6e066b656363616b840466663737616166313530653362666163383565626334323562393564643036623435393535383539383262343462306166373930393537663864336466616436036c656e71086c6f636174696f6e0406737461747573a11986706164646564",
+        "id": "0x0d3ac55159d251918d8cc86b71149d066c68f565c3f3acdba93b2d62b9781107",
+        "initialRotations": 3,
+        "numOfInitialValidators": 5,
+        "previousStatus": 0,
+        "randomSeed": "0xa6b6fdd0a31be01de940ac90afa69cba66dcad18544dd825bc7e611a010470ee",
+        "readStateBlockRanges": [
+          {
+            "ActivationBlock": 22468932,
+            "ProcessingBlock": 22468932,
+            "ProposalBlock": 22468933
+          }
+        ],
+        "recipient": "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+        "result": 1,
+        "resultHash": "0xa4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949",
+        "roundData": [
+          {
+            "appealBond": 0,
+            "leaderIndex": 0,
+            "result": 1,
+            "rotationsLeft": 3,
+            "round": 0,
+            "roundValidators": [
+              "0x0c526a6af46a038e31da21c123756ab2d75f06bc",
+              "0x470aaa7de37ff3e1c2b38ed9096263ca0d541f21",
+              "0x27276953fa2052a5178ae5a3d114a3dfb9a2fc98",
+              "0x4cd1ab61867487f45988db08eb18bd00e20c518a",
+              "0x422357d87b035e478777c84748bac834ce2a9597"
+            ],
+            "validatorResultHash": [
+              "a4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949",
+              "a4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949",
+              "a4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949",
+              "a4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949",
+              "a4ca7caf0ee289ba552e6e49293be7599358035aaf1c3cdf0fdc6427f6deb949"
+            ],
+            "validatorVotes": "AQEBAQE=",
+            "validatorVotesHash": [
+              "fd96be779e80f44eb4e00a8a0b43778cf946dcd7bc7898fc80fbc943c61c9cbb",
+              "af1d1c214bb9befb5c71850304bffe8281b3fdb03b32b5da2224d5519ea7df5b",
+              "f4088be8ba80ceb18773e61855ff52bbaf0cf35840dfe8733ce358f0a0ea304b",
+              "3ce52f880a735da6d32ee90427fcfdd8efc105557eacb182d6756dceae96a6bb",
+              "58d854505805c03b0a236f26e179eae83d8c18477a4aa51c5c7e33cac38c0b23"
+            ],
+            "votesCommitted": 5,
+            "votesRevealed": 5
+          }
+        ],
+        "sender": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "status": 5,
+        "timestamps": {
+          "Activated": 1789987381,
+          "AppealSubmitted": 0,
+          "Committed": 1789987388,
+          "Created": 1789987379,
+          "LastVote": 1789987392,
+          "LeaderRevealed": 1789987390,
+          "Pending": 1789987379,
+          "Proposed": 1789987384
+        },
+        "txCallData": "f891b88e1604617267730dc40768747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f53686168696e3032312f457363726f772f346665666566366131643739306132666233396136326139333765373638353263366362373738632f65766964656e63652f646f65735f6e6f745f65786973742e68746d6c066d6574686f642c666574636880",
+        "txExecutionHash": "0x272e7976c3b0179a6e120769ed1caa421444cc7697fd4a19184ca957217e433e",
+        "txExecutionResult": 1,
+        "txOrigin": "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+        "txSlot": 10,
+        "validUntil": 0
+      },
+      "seconds": 15.2,
+      "step": "write fetch:ACCEPTED",
+      "tx": "0x0d3ac55159d251918d8cc86b71149d066c68f565c3f3acdba93b2d62b9781107"
+    },
+    {
+      "at": "2026-09-21T10:43:17.989996+00:00",
+      "probe": "L6",
+      "python_types": {
+        "__type__": "list",
+        "items": [
+          "str",
+          "str",
+          "str"
+        ]
+      },
+      "step": "read get_fetches",
+      "value": [
+        "{\"result\": {\"header_names\": [\"accept-ranges\", \"access-control-allow-origin\", \"cache-control\", \"content-security-policy\", \"content-type\", \"cross-origin-resource-policy\", \"date\", \"etag\", \"expires\", \"source-age\", \"strict-transport-security\", \"vary\", \"via\", \"x-cache\", \"x-cache-hits\", \"x-content-type-options\", \"x-fastly-request-id\", \"x-frame-options\", \"x-github-edge-region\", \"x-github-request-id\", \"x-served-by\", \"x-timer\", \"x-xss-protection\"], \"keccak\": \"5c717b1d7ae07d506e8ad395d03ff50fec73f383cf11218c4bbf991535efd0c2\", \"len\": 566, \"location\": \"\", \"status\": 200}, \"url\": \"https://github.com/Shahin021/Escrow/raw/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html\"}",
+        "{\"result\": {\"header_names\": [\"accept-ranges\", \"access-control-allow-origin\", \"cache-control\", \"content-security-policy\", \"content-type\", \"cross-origin-resource-policy\", \"date\", \"etag\", \"expires\", \"source-age\", \"strict-transport-security\", \"vary\", \"via\", \"x-cache\", \"x-cache-hits\", \"x-content-type-options\", \"x-fastly-request-id\", \"x-frame-options\", \"x-github-edge-region\", \"x-github-request-id\", \"x-served-by\", \"x-timer\", \"x-xss-protection\"], \"keccak\": \"5c717b1d7ae07d506e8ad395d03ff50fec73f383cf11218c4bbf991535efd0c2\", \"len\": 566, \"location\": \"\", \"status\": 200}, \"url\": \"https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/nova_valid.html\"}",
+        "{\"result\": {\"header_names\": [\"accept-ranges\", \"access-control-allow-origin\", \"content-length\", \"content-security-policy\", \"content-type\", \"cross-origin-resource-policy\", \"date\", \"expires\", \"source-age\", \"strict-transport-security\", \"vary\", \"via\", \"x-cache\", \"x-cache-hits\", \"x-content-type-options\", \"x-fastly-request-id\", \"x-frame-options\", \"x-github-edge-region\", \"x-github-request-id\", \"x-served-by\", \"x-timer\", \"x-xss-protection\"], \"keccak\": \"ff77aaf150e3bfac85ebc425b95dd06b4595585982b44b0af790957f8d3dfad6\", \"len\": 14, \"location\": \"\", \"status\": 404}, \"url\": \"https://raw.githubusercontent.com/Shahin021/Escrow/4fefef6a1d790a2fb39a62a937e76852c6cb778c/evidence/does_not_exist.html\"}"
+      ]
+    }
+  ],
+  "unit_wei": "1000000000000000"
+}

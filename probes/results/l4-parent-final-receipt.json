@@ -1,0 +1,71 @@
+﻿{
+    "id":  "0xfbdedcc595ce9ef597619fc8167e148db25fea0fbbc5d2ff2ed673c0633dc639",
+    "txOrigin":  "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+    "sender":  "0xcc88888f2eed5d8e457e6753faae64941dc33092",
+    "recipient":  "0xf9eb1eeac86cbf96d5131ae791607622314c79c2",
+    "activator":  "0x59dc5e6fd7428c5ee6fc24ae2b99e5860a9c9499",
+    "status":  7,
+    "previousStatus":  0,
+    "txSlot":  13,
+    "initialRotations":  3,
+    "numOfInitialValidators":  5,
+    "randomSeed":  "0x1eebd8d0c53d1bd37b5491e0fd8d6da01598c7b3ccf850ab8decea8913124b54",
+    "txExecutionHash":  "0x1ce986b8d4920394faf34713211e559e53e4994dcd5576f0c37e2742877444dd",
+    "txCallData":  "f84db84a16046172677315d4023078303261364241353736373833423431304239413236323137373633363164376663653733373863328180d0b1d2fe9a0e066d6574686f643c73656e645f746f80",
+    "eqBlocksOutputs":  "c786706164646564",
+    "timestamps":  {
+                       "Created":  1789991998,
+                       "Pending":  1789991998,
+                       "Activated":  1789991999,
+                       "Proposed":  1789992004,
+                       "Committed":  1789992008,
+                       "LastVote":  1789992013,
+                       "AppealSubmitted":  0,
+                       "LeaderRevealed":  1789992011
+                   },
+    "result":  1,
+    "txExecutionResult":  1,
+    "epoch":  160,
+    "resultHash":  "0xee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509",
+    "validUntil":  0,
+    "readStateBlockRanges":  [
+                                 {
+                                     "ActivationBlock":  22470227,
+                                     "ProcessingBlock":  22470227,
+                                     "ProposalBlock":  22470228
+                                 }
+                             ],
+    "roundData":  [
+                      {
+                          "round":  0,
+                          "leaderIndex":  1,
+                          "votesCommitted":  5,
+                          "votesRevealed":  5,
+                          "appealBond":  0,
+                          "rotationsLeft":  3,
+                          "result":  1,
+                          "roundValidators":  [
+                                                  "0x3f5caed686336ed9cf3dede61154b0cd67fb9bd7",
+                                                  "0x422357d87b035e478777c84748bac834ce2a9597",
+                                                  "0x96298d411a2d622945beaca6112374583b501d52",
+                                                  "0x3b940a5b4a762583453d9e9cf0981be0426a8e79",
+                                                  "0xa856ae1b278f030082c66fa50a5f51f485d1f940"
+                                              ],
+                          "validatorVotes":  "AQEBAQE=",
+                          "validatorVotesHash":  [
+                                                     "e66ad8555e2048868e58f7d05a90138ca92b20fcf53c11b78f9f78a8130009f0",
+                                                     "a04b65dfeba442f25fc3773ad112558ccaf4dfcb76dba198eacc2668a83bdf8f",
+                                                     "88792b36529a015025bfb4b58f2cf2193b386060293904eacd049e7cfb42a1ed",
+                                                     "1934e5138a2c02c8db73f0403d7b53a963600952a40e344d6713c32771c254cf",
+                                                     "fb4f8be17d772885f76b57261028006fbf1b7d56e9962cdf0b2f83369c1baa69"
+                                                 ],
+                          "validatorResultHash":  [
+                                                      "ee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509",
+                                                      "ee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509",
+                                                      "ee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509",
+                                                      "ee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509",
+                                                      "ee5ba5396084cfe07220c0de767d98eab154d0b5a53fdfe39c493d5f0c6ea509"
+                                                  ]
+                      }
+                  ]
+}

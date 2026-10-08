@@ -1,0 +1,23 @@
+﻿{
+    "observed_at":  "2026-09-24T21:47:40.9303675Z",
+    "probe":  "L4b failing value-bearing IC-to-IC call",
+    "sender_contract":  "0xfe56f05dc0538c4b3912c63137c5c4d7370833b0",
+    "receiver_contract":  "0xe8e28d3e014c9dc5890efdf21500d2877dde31fa",
+    "amount":  "1000000000000000",
+    "outer_evm_tx":  "0xbe9619818306b1077e19e0083bfca727f6ade741089b51a7bf1dd7791e99c4be",
+    "parent_tx":  "0xbc60450623cb43d63e32b58aa6e7e8678dd6ce187d6938b90afdc8ba8d46c760",
+    "parent_status":  "Finalized",
+    "parent_statusCode":  7,
+    "parent_txExecutionResult":  1,
+    "child_tx":  "0xcdc97d6ffa4e0a5bd511d690c8ca103984c522a889361d6614b18efc42b6e4cc",
+    "child_status":  "Finalized",
+    "child_statusCode":  7,
+    "child_txExecutionResult":  2,
+    "sender_balance_before":  "2000000000000000",
+    "sender_balance_after":  "1000000000000000",
+    "receiver_balance_before":  "0",
+    "receiver_balance_after":  "1000000000000000",
+    "receiver_attempts_before":  "0",
+    "receiver_attempts_after":  "0",
+    "grandchildren_count":  0
+}

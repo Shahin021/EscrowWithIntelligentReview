@@ -1,0 +1,52 @@
+name: Direct Mode Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  direct-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # SHA-256 of genvm-universal.tar.xz for the pinned release. Checked after
+      # every restore or download so a changed or replaced upstream asset fails
+      # loudly instead of silently changing the runtime under test.
+      GENVM_SHA256: 4f0b358ec98ec148be9b95cdfb0f0e1a6cbe64da0194fdfac3fffc6f5d1d93e2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-test.txt
+
+      - name: Read pinned GenVM version from conftest.py
+        id: genvm
+        run: |
+          VERSION=$(python -c 'import ast; tree=ast.parse(open('"'"'conftest.py'"'"', encoding='"'"'utf-8'"'"').read()); value=next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id=='"'"'GENVM_VERSION'"'"' for t in n.targets)); print(ast.literal_eval(value.args[1] if isinstance(value, ast.Call) else value))')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Pinned GenVM: $VERSION"
+
+      - name: Restore GenVM cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gltest-direct
+          key: gltest-direct-${{ steps.genvm.outputs.version }}-${{ env.GENVM_SHA256 }}
+
+      - name: Fetch and verify pinned GenVM
+        run: |
+          python -c "from gltest.direct.sdk_loader import download_artifacts; print(download_artifacts('${{ steps.genvm.outputs.version }}'))"
+          echo "${GENVM_SHA256}  $HOME/.cache/gltest-direct/genvm-universal-${{ steps.genvm.outputs.version }}.tar.xz" | sha256sum -c -
+
+      - name: Run full Direct Mode test suite
+        run: python -m pytest -v -rA -p no:cacheprovider

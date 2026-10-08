@@ -1,0 +1,1966 @@
+{
+  "network": "Bradbury",
+  "consensus": "0x0112Bf6e83497965A5fdD6Dad1E447a6E004271D",
+  "source_bytes": 141909,
+  "packed_bytes": 18861,
+  "gas_estimate": 15877403,
+  "observed_gas_cap": 16777216,
+  "below_cap": true,
+  "schema_equal": true,
+  "original_schema": {
+    "ctor": {
+      "kwparams": {},
+      "params": [
+        [
+          "worker",
+          "string"
+        ],
+        [
+          "milestones_json",
+          "string"
+        ],
+        [
+          "allowed_sources",
+          "string"
+        ],
+        [
+          "render_mode",
+          "string"
+        ],
+        [
+          "max_revisions",
+          "int"
+        ],
+        [
+          "continue_after_refund",
+          "bool"
+        ],
+        [
+          "registry",
+          "string"
+        ]
+      ]
+    },
+    "methods": {
+      "abort_failed_appeal": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "accept_settlement": {
+        "kwparams": {},
+        "params": [
+          [
+            "nonce",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "activate_funding": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "appeal": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "note",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "claim_payment": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "close_project": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "confirm_outflow": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "emit_next_outflow": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "expire_delivery": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "finalize_rejection": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "fund": {
+        "kwparams": {},
+        "params": [],
+        "payable": true,
+        "readonly": false,
+        "ret": "null"
+      },
+      "fund_appeal_credit": {
+        "kwparams": {},
+        "params": [],
+        "payable": true,
+        "readonly": false,
+        "ret": "null"
+      },
+      "get_accounting": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "get_active_milestone": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_allowed_sources": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_appeal_bond_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_appeal_credit_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_criteria_bits": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_evidence_hash": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_excerpt": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_kind": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_milestone": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_notes": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_reason": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_revision_after": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_url": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_verdict": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_criterion_required": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ],
+          [
+            "position",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_criterion_text": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ],
+          [
+            "position",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_current_attempt_id": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_deposit_credit_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_inflight_out": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_locked": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_activated_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_bond": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_expiry": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_failure_threshold": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_note": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_open": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_milestone_appeal_used": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_milestone_count": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_criteria_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_delivery_deadline": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_delivery_window": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_final_rejected_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_required_appeal_bond": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_required_mask": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_review_started_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_revision_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_rubric_hash": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_spec": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_stall_eligible_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_status": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_unavailable_grace_expiry": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_unavailable_since": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_count": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_outflow_kind": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_milestone": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_outflow_recipient": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_status": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_project_status": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_queued_out": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_registry": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_render_mode": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_rubric_version": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_sent_total": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_settlement": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "get_total_appeal_bonds_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_appeal_credit_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_appeal_credit_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_bonds_forfeited": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_bonds_returned": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_deposits_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_deposits_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_funded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_released": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_required": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_settled_client": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_settled_worker": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_unmatched_swept": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "interface_id": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "is_milestone_released": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "mark_review_stalled": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "parties": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "propose_settlement": {
+        "kwparams": {},
+        "params": [
+          [
+            "to_worker",
+            "string"
+          ],
+          [
+            "to_client",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "redirect_outflow": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ],
+          [
+            "to",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "released_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "replace_evidence": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "artifact_url",
+            "string"
+          ],
+          [
+            "notes",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "resolve": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "submit_deliverable": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "artifact_url",
+            "string"
+          ],
+          [
+            "notes",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "sweep_unmatched": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_appeal_credit": {
+        "kwparams": {},
+        "params": [
+          [
+            "amount",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_deposit_credit": {
+        "kwparams": {},
+        "params": [
+          [
+            "amount",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_settlement": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      }
+    }
+  },
+  "packed_schema": {
+    "ctor": {
+      "kwparams": {},
+      "params": [
+        [
+          "worker",
+          "string"
+        ],
+        [
+          "milestones_json",
+          "string"
+        ],
+        [
+          "allowed_sources",
+          "string"
+        ],
+        [
+          "render_mode",
+          "string"
+        ],
+        [
+          "max_revisions",
+          "int"
+        ],
+        [
+          "continue_after_refund",
+          "bool"
+        ],
+        [
+          "registry",
+          "string"
+        ]
+      ]
+    },
+    "methods": {
+      "abort_failed_appeal": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "accept_settlement": {
+        "kwparams": {},
+        "params": [
+          [
+            "nonce",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "activate_funding": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "appeal": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "note",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "claim_payment": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "close_project": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "confirm_outflow": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "emit_next_outflow": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "expire_delivery": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "finalize_rejection": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "fund": {
+        "kwparams": {},
+        "params": [],
+        "payable": true,
+        "readonly": false,
+        "ret": "null"
+      },
+      "fund_appeal_credit": {
+        "kwparams": {},
+        "params": [],
+        "payable": true,
+        "readonly": false,
+        "ret": "null"
+      },
+      "get_accounting": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "get_active_milestone": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_allowed_sources": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_appeal_bond_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_appeal_credit_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_criteria_bits": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_evidence_hash": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_excerpt": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_kind": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_milestone": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_notes": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_reason": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_revision_after": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_attempt_url": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_attempt_verdict": {
+        "kwparams": {},
+        "params": [
+          [
+            "attempt_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_criterion_required": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ],
+          [
+            "position",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_criterion_text": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ],
+          [
+            "position",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_current_attempt_id": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_deposit_credit_held": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_inflight_out": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_locked": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_activated_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_bond": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_expiry": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_failure_threshold": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_note": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_appeal_open": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_milestone_appeal_used": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "get_milestone_count": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_criteria_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_delivery_deadline": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_delivery_window": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_final_rejected_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_required_appeal_bond": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_required_mask": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_review_started_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_revision_count": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_milestone_rubric_hash": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_spec": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_stall_eligible_at": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_status": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_unavailable_grace_expiry": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_milestone_unavailable_since": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_count": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_outflow_kind": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_milestone": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "int"
+      },
+      "get_outflow_recipient": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_outflow_status": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_project_status": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_queued_out": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_registry": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_render_mode": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_rubric_version": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_sent_total": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_settlement": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "get_total_appeal_bonds_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_appeal_credit_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_appeal_credit_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_bonds_forfeited": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_bonds_returned": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_deposits_received": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_deposits_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_funded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_refunded": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_released": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_required": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_settled_client": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_settled_worker": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "get_total_unmatched_swept": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "interface_id": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "string"
+      },
+      "is_milestone_released": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "bool"
+      },
+      "mark_review_stalled": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "parties": {
+        "kwparams": {},
+        "params": [],
+        "readonly": true,
+        "ret": "dict"
+      },
+      "propose_settlement": {
+        "kwparams": {},
+        "params": [
+          [
+            "to_worker",
+            "string"
+          ],
+          [
+            "to_client",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "redirect_outflow": {
+        "kwparams": {},
+        "params": [
+          [
+            "outflow_id",
+            "int"
+          ],
+          [
+            "to",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "released_amount": {
+        "kwparams": {},
+        "params": [
+          [
+            "index",
+            "int"
+          ]
+        ],
+        "readonly": true,
+        "ret": "string"
+      },
+      "replace_evidence": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "artifact_url",
+            "string"
+          ],
+          [
+            "notes",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "resolve": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "submit_deliverable": {
+        "kwparams": {},
+        "params": [
+          [
+            "milestone_index",
+            "int"
+          ],
+          [
+            "artifact_url",
+            "string"
+          ],
+          [
+            "notes",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "sweep_unmatched": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_appeal_credit": {
+        "kwparams": {},
+        "params": [
+          [
+            "amount",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_deposit_credit": {
+        "kwparams": {},
+        "params": [
+          [
+            "amount",
+            "string"
+          ]
+        ],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      },
+      "withdraw_settlement": {
+        "kwparams": {},
+        "params": [],
+        "payable": false,
+        "readonly": false,
+        "ret": "null"
+      }
+    }
+  },
+  "constructor_args": [
+    "0x2a749c03a6DE888B7B42305b92032Fa9c1D54543",
+    "[{\"spec\":\"Unfunded runtime smoke test\",\"amount\":\"1\"}]",
+    "raw.githubusercontent.com/Shahin021/Escrow",
+    "text",
+    3,
+    false,
+    "0x33c5A0F51Ed10Ee21dC55399ce4A37D525321f99"
+  ],
+  "signed_or_broadcast": false
+}

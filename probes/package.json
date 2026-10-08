@@ -1,0 +1,9 @@
+{
+  "name": "escrow-v3-runtime-probes",
+  "private": true,
+  "type": "module",
+  "description": "NON-PRODUCTION. genlayer-js side of probe L1.",
+  "dependencies": {
+    "genlayer-js": "1.1.8"
+  }
+}
