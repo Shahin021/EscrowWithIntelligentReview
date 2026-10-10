@@ -246,7 +246,7 @@ def test_query_and_fragment_are_rejected_before_attempt(
     )
 
 
-def test_attempt_log_stops_at_twenty_per_milestone(
+def test_unavailable_retries_do_not_fill_the_attempt_log(
     direct_vm,
     direct_deploy,
     direct_owner,
@@ -283,22 +283,14 @@ def test_attempt_log_stops_at_twenty_per_milestone(
         == "EVIDENCE_UNAVAILABLE"
     )
 
-    # Each retry creates one new immutable audit attempt.
-    for _ in range(19):
+    # No acquired evidence and no new verdict: no new audit slot. More than
+    # the milestone cap can be retried without blocking worker replacement.
+    for _ in range(25):
         escrow.resolve(0)
 
-    assert int(escrow.get_attempt_count(0)) == 20
-
-    with direct_vm.expect_revert(
-        "milestone attempt limit reached"
-    ):
-        escrow.resolve(0)
-
-    assert int(escrow.get_attempt_count(0)) == 20
-    assert (
-        escrow.get_milestone_status(0)
-        == "EVIDENCE_UNAVAILABLE"
-    )
+    assert int(escrow.get_attempt_count(0)) == 1
+    assert escrow.get_attempt_verdict(0) == "UNAVAILABLE"
+    assert escrow.get_milestone_status(0) == "EVIDENCE_UNAVAILABLE"
 
 
 def test_rejects_same_client_and_worker(

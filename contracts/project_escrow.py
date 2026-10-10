@@ -89,6 +89,11 @@ APPEAL_BOND_BPS = 1000
 BPS_DENOMINATOR = 10000
 MAX_APPEAL_NOTE_CHARS = 500
 EVIDENCE_UNAVAILABLE_GRACE_SECONDS = 48 * 3600
+# Preserve the 48-hour replacement grace plus one review-stall window. This
+# bound belongs to the unresolved incident, not to an artifact or retry.
+EVIDENCE_RECOVERY_SECONDS = (
+    EVIDENCE_UNAVAILABLE_GRACE_SECONDS + REVIEW_STALL_SECONDS
+)
 MIN_DELIVERY_WINDOW_SECONDS = 1
 MAX_DELIVERY_WINDOW_SECONDS = 365 * SECONDS_PER_DAY
 
@@ -952,6 +957,9 @@ class ProjectEscrow(gl.Contract):
     # further unavailable retry must not reset it, or the grace could be
     # postponed indefinitely.
     milestone_unavailable_since: DynArray[u256]
+    # First unavailable result since the last substantive adjudication.
+    # Unlike the per-artifact grace clock, replacements do not reset this.
+    milestone_evidence_recovery_started_at: DynArray[u256]
     # Set when a milestone first enters REJECTED_FINAL; 0 otherwise.
     milestone_final_rejected_at: DynArray[u256]
     # One appeal per milestone: 0 unused, 1 used (whatever its outcome).
@@ -1249,6 +1257,7 @@ class ProjectEscrow(gl.Contract):
             self.milestone_activated_at.append(u256(0))
             self.milestone_review_started_at.append(u256(0))
             self.milestone_unavailable_since.append(u256(0))
+            self.milestone_evidence_recovery_started_at.append(u256(0))
             self.milestone_final_rejected_at.append(u256(0))
             self.milestone_appeal_used.append(u32(0))
             self.milestone_appeal_open.append(u32(0))
@@ -1461,6 +1470,12 @@ class ProjectEscrow(gl.Contract):
 
         if index != int(self.active_milestone):
             raise gl.vm.UserError("milestone is not active")
+
+    def _evidence_recovery_deadline(self, index):
+        started = int(self.milestone_evidence_recovery_started_at[index])
+        if started == 0:
+            return 0
+        return _checked_deadline(started, EVIDENCE_RECOVERY_SECONDS)
 
     def _milestone_criteria(self, index):
         start = int(self.milestone_criteria_start[index])
@@ -1715,23 +1730,12 @@ class ProjectEscrow(gl.Contract):
             self.milestone_current_attempt[milestone_index]
         )
 
-        # An unavailable result is immutable. Retrying the same URL creates
-        # a new audit attempt instead of overwriting the previous result.
-        if status == "EVIDENCE_UNAVAILABLE":
-            previous_attempt = attempt_index
-
-            self._append_attempt(
-                milestone_index,
-                self.attempt_urls[previous_attempt],
-                "",
-                "RETRY_UNAVAILABLE",
-            )
-
-            attempt_index = int(
-                self.milestone_current_attempt[milestone_index]
-            )
-
-        if self.attempt_verdicts[attempt_index] != "PENDING":
+        # Re-fetching unavailable immutable evidence is permissionless. Only
+        # a substantive retry result allocates a new audit slot, after
+        # consensus. Repeated infrastructure failures leave the original
+        # record intact and cannot burn the worker's replacement capacity.
+        retry_unavailable = status == "EVIDENCE_UNAVAILABLE"
+        if not retry_unavailable and self.attempt_verdicts[attempt_index] != "PENDING":
             raise gl.vm.UserError(
                 "submission attempt has already been resolved"
             )
@@ -2041,6 +2045,17 @@ class ProjectEscrow(gl.Contract):
 
         outcome = str(verdict["outcome"])
 
+        if retry_unavailable:
+            if outcome == "UNAVAILABLE":
+                return
+            self._append_attempt(
+                milestone_index,
+                self.attempt_urls[attempt_index],
+                "",
+                "RETRY_UNAVAILABLE",
+            )
+            attempt_index = int(self.milestone_current_attempt[milestone_index])
+
         self.attempt_evidence_hashes[attempt_index] = str(
             verdict["evidence_hash"]
         )
@@ -2077,11 +2092,15 @@ class ProjectEscrow(gl.Contract):
                     milestone_index
                 ] = u256(self._now())
 
+            if self.milestone_evidence_recovery_started_at[milestone_index] == u256(0):
+                self.milestone_evidence_recovery_started_at[milestone_index] = u256(self._now())
+
             return
 
         # Evidence became reviewable and was judged, so any unavailable
         # episode and the review timer are over.
         self.milestone_unavailable_since[milestone_index] = u256(0)
+        self.milestone_evidence_recovery_started_at[milestone_index] = u256(0)
         self.milestone_review_started_at[milestone_index] = u256(0)
 
         appeal_open = (
@@ -2634,6 +2653,37 @@ class ProjectEscrow(gl.Contract):
                     "appeal window has not passed"
                 )
 
+        self._queue_refund_for_failed_milestone(milestone_index)
+
+    @gl.public.write
+    def recover_unavailable_evidence(self, milestone_index: int) -> None:
+        """Permissionless principal recovery after 72 hours without a verdict.
+
+        The clock starts at the first consensus-confirmed unavailable result
+        and survives retries, artifact swaps and stalled replacement reviews.
+        The worker keeps 48 hours of grace and an additional 24 hours for
+        replacement review. A substantive verdict clears the clock. Recovery
+        is an infrastructure timeout, not a fabricated rejection or revision.
+        Open appeals keep their existing bond-return/finalization protections.
+        """
+        self._require_active_milestone(milestone_index)
+        if self.milestone_appeal_open[milestone_index] != u32(0):
+            raise gl.vm.UserError("open appeal must use finalize_rejection")
+        if self.milestone_statuses[milestone_index] not in (
+            "EVIDENCE_UNAVAILABLE", "UNDER_REVIEW", "REVIEW_STALLED",
+        ):
+            raise gl.vm.UserError("milestone has no unresolved evidence incident")
+        deadline = self._evidence_recovery_deadline(milestone_index)
+        if deadline == 0:
+            raise gl.vm.UserError("milestone has no evidence recovery deadline")
+        if self._now() < deadline:
+            raise gl.vm.UserError("evidence recovery window has not passed")
+        attempt_index = int(self.milestone_current_attempt[milestone_index])
+        if self.attempt_verdicts[attempt_index] == "PENDING":
+            self.attempt_verdicts[attempt_index] = "ABORTED"
+        self.milestone_review_started_at[milestone_index] = u256(0)
+        self.milestone_unavailable_since[milestone_index] = u256(0)
+        self.milestone_evidence_recovery_started_at[milestone_index] = u256(0)
         self._queue_refund_for_failed_milestone(milestone_index)
 
     @gl.public.write
@@ -3809,6 +3859,12 @@ class ProjectEscrow(gl.Contract):
         if index < 0 or index >= len(self.milestone_review_started_at):
             raise gl.vm.UserError("milestone index out of range")
         return str(self._stall_eligible_at(index))
+
+    @gl.public.view
+    def get_milestone_evidence_recovery_deadline(self, index: int) -> str:
+        if index < 0 or index >= len(self.milestone_evidence_recovery_started_at):
+            raise gl.vm.UserError("milestone index out of range")
+        return str(self._evidence_recovery_deadline(index))
 
     @gl.public.view
     def get_milestone_unavailable_since(self, index: int) -> str:
