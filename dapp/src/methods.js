@@ -2,8 +2,8 @@
  * The contract's write surface, transcribed from contracts/project_escrow.py.
  *
  * Every entry here was read from the contract source. Nothing is invented: an
- * earlier draft of this app offered `expire_unavailable`, which the contract
- * does not have, and that is exactly the class of bug this table prevents.
+ * unavailable-evidence recovery is offered only when the deployed contract
+ * exposes its recovery deadline, keeping legacy v2 deployments compatible.
  *
  * `fields` are the inputs the UI must collect, in argument order. `payable`
  * marks the two methods that carry value; everything else is sent with 0n.
@@ -66,6 +66,12 @@ export const METHODS = {
   },
   expire_delivery: {
     label: "Expire the delivery deadline",
+    milestoneArg: true,
+    fields: [],
+    args: (index) => [index],
+  },
+  recover_unavailable_evidence: {
+    label: "Recover funds after unavailable evidence",
     milestoneArg: true,
     fields: [],
     args: (index) => [index],

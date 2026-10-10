@@ -30,6 +30,11 @@ export function milestonePredicates(milestone, now, activeIndex) {
   return {
     ...milestone,
     isActive,
+    evidenceRecoverable:
+      isActive &&
+      !milestone.appealOpen &&
+      ["EVIDENCE_UNAVAILABLE", "UNDER_REVIEW", "REVIEW_STALLED"].includes(status) &&
+      isReached(milestone.evidenceRecoveryDeadline, now),
     expirable:
       isActive &&
       status === "AWAITING_DELIVERY" &&

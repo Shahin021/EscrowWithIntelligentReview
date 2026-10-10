@@ -374,9 +374,8 @@ def test_retries_do_not_reset_the_continuous_timer(
 
         assert escrow.get_milestone_unavailable_since(0) == str(start)
         assert int(escrow.get_milestone_revision_count(0)) == 0
-        assert escrow.get_attempt_kind(
-            int(escrow.get_attempt_count(0)) - 1
-        ) == "RETRY_UNAVAILABLE"
+        assert int(escrow.get_attempt_count(0)) == 1
+        assert escrow.get_attempt_kind(0) == "INITIAL_SUBMISSION"
 
 
 def test_replacement_before_grace_still_costs_a_revision(
@@ -608,8 +607,9 @@ def test_same_url_retry_remains_the_supported_free_path(
 
     _make_unavailable(direct_vm, escrow, start + GRACE + DAY)
 
-    assert escrow.get_attempt_kind(1) == "RETRY_UNAVAILABLE"
-    assert escrow.get_attempt_url(1) == escrow.get_attempt_url(0)
+    assert int(escrow.get_attempt_count(0)) == 1
+    assert escrow.get_attempt_kind(0) == "INITIAL_SUBMISSION"
+    assert escrow.get_attempt_verdict(0) == "UNAVAILABLE"
     assert int(escrow.get_milestone_revision_count(0)) == 0
     assert escrow.get_milestone_unavailable_since(0) == str(start)
 

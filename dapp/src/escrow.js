@@ -90,6 +90,7 @@ export async function readMilestone(client, address, index) {
     appealOpen,
     appealThreshold,
     requiredBond,
+    evidenceRecoveryDeadline,
   ] = await Promise.all([
     call("get_milestone_status"),
     call("get_milestone_amount"),
@@ -104,6 +105,9 @@ export async function readMilestone(client, address, index) {
     call("get_milestone_appeal_open"),
     call("get_milestone_appeal_failure_threshold"),
     call("get_milestone_required_appeal_bond"),
+    // Additive capability: older v2 contracts have no recovery view. A
+    // failed read hides recovery, never fabricates an eligible deadline.
+    call("get_milestone_evidence_recovery_deadline").catch(() => "0"),
   ]);
 
   return {
@@ -121,6 +125,7 @@ export async function readMilestone(client, address, index) {
     appealOpen: Boolean(appealOpen),
     appealFailureThreshold: appealThreshold,
     requiredAppealBond: requiredBond,
+    evidenceRecoveryDeadline: evidenceRecoveryDeadline || "0",
   };
 }
 

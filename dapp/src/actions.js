@@ -56,6 +56,7 @@ const PERMISSIONLESS = new Set([
   "resolve",
   "mark_review_stalled",
   "expire_delivery",
+  "recover_unavailable_evidence",
   "finalize_rejection",
   "emit_next_outflow",
   "confirm_outflow",
@@ -182,6 +183,10 @@ export function availableActions({ role, project, milestone }) {
 
   if (milestone && milestone.expirable) {
     add("expire_delivery", "Expire the delivery deadline");
+  }
+
+  if (milestone && milestone.evidenceRecoverable) {
+    add("recover_unavailable_evidence", "Recover funds after unavailable evidence");
   }
 
   if (milestone && milestone.finalizable) {
