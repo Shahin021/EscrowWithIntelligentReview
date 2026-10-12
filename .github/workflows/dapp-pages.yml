@@ -1,4 +1,4 @@
-name: dApp verification
+name: dApp verification and publication
 
 on:
   push:
@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,13 +34,34 @@ jobs:
           cache-dependency-path: dapp/package-lock.json
       - run: npm ci
       - run: npm test
-      - name: Build Bradbury dashboard
+      - name: Build corrected Bradbury dashboard
         env:
           VITE_GENLAYER_NETWORK: testnetBradbury
-          VITE_ESCROW_ADDRESS: "0x9304455A1Bad15A6317E1d4de92c9b599bae246C"
+          VITE_ESCROW_ADDRESS: "0x0a578Ce8A4271bA44669d8298fd77dd5F4D2ea8a"
           VITE_REGISTRY_ADDRESS: "0x33c5A0F51Ed10Ee21dC55399ce4A37D525321f99"
         run: npm run build
       - uses: actions/upload-artifact@v4
         with:
           name: dapp-dist
           path: dapp/dist
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dapp/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Publish dashboard
+        id: deployment
+        uses: actions/deploy-pages@v4
