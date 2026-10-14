@@ -400,3 +400,16 @@ fieldset[disabled] .btn-action { opacity: 0.45; cursor: not-allowed; }
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+
+/* Read-only consensus receipts, separate from project accounting. */
+.receipt-panel { margin: 0 0 24px; padding: 22px; }
+.receipt-panel h2 { margin: 0 0 10px; font-size: 18px; }
+.receipt-panel .receipt-note { font-size: 12px; line-height: 1.7; opacity: .8; }
+.receipt-panel > p[role="status"] { font-size: 13px; line-height: 1.7; }
+.receipt-panel .btn { color: var(--ink-700); border-color: var(--ice-400); }
+.receipt-list { list-style: none; padding: 0; margin: 16px 0 0; }
+.receipt-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--ice-300); font-size: 12px; }
+.receipt-list a { color: var(--ink-700); text-decoration: underline; overflow-wrap: anywhere; }
+.receipt-list span { text-align: right; color: var(--ink-500); }
+.receipt-list span[data-ok="true"] { color: #087343; font-weight: 700; }
+@media (max-width: 480px) { .receipt-list li { flex-direction: column; gap: 6px; } .receipt-list span { text-align: left; } }
