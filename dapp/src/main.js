@@ -1,3 +1,4 @@
+import { mountReceiptPanel } from "./receipt-panel.js";
 /**
  * UI layer. Every decision still comes from the tested controller; this file
  * collects inputs, renders what the controller reports, and calls it back.
@@ -41,6 +42,7 @@ const setText = (node, value) => {
 };
 
 const logo = createLogo(el("logo"), { title: "GenLayer Escrow" });
+mountReceiptPanel(el("receipt-panel"), config, () => createReadClient(config.network));
 
 function chainNow() {
   // Until a wallet is connected there is no chain clock to read, so local

@@ -1,0 +1,34 @@
+{
+  "network": "testnetBradbury",
+  "escrow": "0x0a578Ce8A4271bA44669d8298fd77dd5F4D2ea8a",
+  "transactions": [
+    {
+      "label": "Deposit",
+      "hash": "0x4dbf2bc65654eeec2e6e520509911a45d5d5b2192a8dae859a9a9215ddf773fe"
+    },
+    {
+      "label": "Activate funding",
+      "hash": "0x6b0a8c3a25435d80e51e21970d7aff26ade221b17debf9ce187f897c56b5c197"
+    },
+    {
+      "label": "Submit evidence",
+      "hash": "0x3949ecc7ebb58c52e74398ff65bbd2df8aa130e650eaf9175ba8390283efc2cf"
+    },
+    {
+      "label": "Review evidence",
+      "hash": "0x75f0ca984c9c5244c3a801fe3cabd2539ed5681743a165ca0deca4d3a1950382"
+    },
+    {
+      "label": "Third-party recovery",
+      "hash": "0x6a14849738418854f6990a45e3fa343a37d0531f2591ef9bb22d67b5bd1bd0a3"
+    },
+    {
+      "label": "Confirm refund",
+      "hash": "0x4892263642e78ff18a98358a6163e63196a284ad307d5b1c7437477c79386c8c"
+    },
+    {
+      "label": "Close project",
+      "hash": "0xec91f46e0f949368894bea5f1934d6a72a181772b46e76682b88501db96c3c52"
+    }
+  ]
+}
