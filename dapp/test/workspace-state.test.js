@@ -7,7 +7,7 @@ import { classifyReceipt, collectProjectTransactions, scanNewTransactionLogs } f
 import { controllerConfig, parseProjectParam, resolveWorkspace } from "../src/workspace/project.js";
 import { createProjectBook, inspectProject, registryCandidates } from "../src/workspace/projects.js";
 import { criterionResults, milestoneTimeline, readAttempts } from "../src/workspace/history.js";
-import { formatDuration, recoveryPlan } from "../src/workspace/recovery.js";
+import { formatDuration, readContractBalance, recoveryPlan } from "../src/workspace/recovery.js";
 import { connectSession, disconnectSession, restoreSession } from "../src/workspace/session.js";
 
 const A = "0x" + "a1".repeat(20);
@@ -61,11 +61,12 @@ describe("journal", () => {
     expect(after.identifierConflict.field).toBe("evmHash");
   });
 
-  it("survives a storage that throws", () => {
+  it("refuses to record an intent when storage throws, but still lists (empty) for display", () => {
     const broken = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }, removeItem() {} };
     const j = createJournal(safeStorage(broken));
-    const e = j.create({ network: "n", project: P, account: A, functionName: "f", args: [] });
-    expect(j.get(e.id)).toBeTruthy();
+    expect(() => j.create({ network: "n", project: P, account: A, functionName: "f", args: [] })).toThrow(/Writes are disabled/);
+    expect(j.list({})).toEqual([]);
+    expect(j.health().ok).toBe(false);
   });
 
   it("trims only settled history, never unresolved entries", () => {
@@ -211,8 +212,10 @@ describe("milestone history from the attempt log", () => {
 });
 
 describe("recovery steps", () => {
-  const project = { status: "ACTIVE", client: A, canClose: false };
-  const m = (over = {}) => ({ index: 0, status: "EVIDENCE_UNAVAILABLE", appealOpen: false, evidenceRecoveryDeadline: "1000", ...over });
+  const ledger = { locked: "0", depositCreditHeld: "0", appealCreditHeld: "0", appealBondHeld: "0", queuedOut: "0", bouncedHeld: "0", unmatchedHeld: "0",
+    totalFunded: "1", totalReleased: "0", totalRefunded: "0" };
+  const project = { status: "ACTIVE", client: A, canClose: false, inflightOut: "0", ...ledger };
+  const m = (over = {}) => ({ index: 0, amount: "1", status: "EVIDENCE_UNAVAILABLE", appealOpen: false, evidenceRecoveryDeadline: "1000", ...over });
 
   it("counts down on chain time and only then offers recovery", () => {
     const before = recoveryPlan({ milestone: m(), project, outflows: [], chainTime: 400, activeIndex: 0 });
@@ -225,16 +228,75 @@ describe("recovery steps", () => {
   });
 
   it("an expired deadline is not a refund: settled only when CONFIRMED and REFUNDED", () => {
-    const emitted = recoveryPlan({ milestone: m({ status: "REFUND_PENDING" }), project: { ...project, status: "SETTLING" },
-      outflows: [{ id: 0, milestone: 0, kind: "PROJECT_REMAINDER_REFUND", status: "EMITTED", amount: "1", recipient: A }], chainTime: 5000, activeIndex: 0 });
+    const emitted = recoveryPlan({ milestone: m({ status: "REFUND_PENDING" }), project: { ...project, status: "SETTLING", inflightOut: "1" },
+      outflows: [{ id: 0, milestone: 0, kind: "PROJECT_REMAINDER_REFUND", status: "EMITTED", amount: "1", recipient: A }], chainTime: 5000, activeIndex: 0,
+      balance: { wei: 0n } });
     expect(emitted.settled).toBe(false);
     expect(emitted.next).toBe("confirm_outflow");
     expect(emitted.outflowId).toBe(0);
-    const done = recoveryPlan({ milestone: m({ status: "REFUNDED" }), project: { ...project, status: "SETTLING", canClose: true },
+    const done = recoveryPlan({ milestone: m({ status: "REFUNDED" }), project: { ...project, status: "SETTLING", canClose: true, totalRefunded: "1" },
       outflows: [{ id: 0, milestone: 0, kind: "PROJECT_REMAINDER_REFUND", status: "CONFIRMED", amount: "1", recipient: A }], chainTime: 5000, activeIndex: 0 });
     expect(done.settled).toBe(true);
     expect(done.refundToClient).toBe(true);
     expect(done.next).toBe("close_project");
+  });
+
+  describe("confirming the refund needs the native transfer to have landed", () => {
+    const emittedPlan = (balance, over = {}) => recoveryPlan({
+      milestone: m({ status: "REFUND_PENDING" }),
+      project: { ...project, status: "SETTLING", inflightOut: "1", locked: "5", ...over.project },
+      outflows: [{ id: 0, milestone: 0, kind: "MILESTONE_REFUND", status: "EMITTED", amount: "1", recipient: A, ...over.outflow }],
+      chainTime: 5000, activeIndex: 0, balance });
+
+    it("delayed transfer: balance still includes the in-flight amount → waiting, nothing to press", () => {
+      const p = emittedPlan({ wei: 6n });              // ledger 5 + in flight 1
+      expect(p.steps[1].state).toBe("waiting");
+      expect(p.steps[1].detail).toMatch(/has not landed yet/);
+      expect(p.next).toBeNull();
+      expect(p.settled).toBe(false);
+    });
+
+    it("transfer landed: balance equals the ledger without the in-flight amount → ready", () => {
+      const p = emittedPlan({ wei: 5n });
+      expect(p.steps[1].state).toBe("ready");
+      expect(p.next).toBe("confirm_outflow");
+      expect(p.settled).toBe(false);                   // ready to confirm is still not paid
+    });
+
+    it("balance unreadable → waiting with the reason; never ready", () => {
+      const p = emittedPlan({ wei: null, error: "eth_getBalance refused" });
+      expect(p.steps[1].state).toBe("waiting");
+      expect(p.steps[1].detail).toMatch(/eth_getBalance refused/);
+      expect(p.next).toBeNull();
+      expect(emittedPlan(null).next).toBeNull();
+    });
+
+    it("balance matching neither side, or in-flight mismatch → blocked", () => {
+      expect(emittedPlan({ wei: 9n }).steps[1].state).toBe("blocked");
+      expect(emittedPlan({ wei: 5n }, { project: { inflightOut: "2" } }).steps[1].state).toBe("blocked");
+    });
+
+    it("an outflow that is not the expected refund is never confirmed or called settled", () => {
+      for (const outflow of [{ recipient: "0x" + "99".repeat(20) }, { milestone: 1 }, { amount: "2" }, { kind: "MILESTONE_PAYOUT" }]) {
+        const p = emittedPlan({ wei: 5n }, { outflow });
+        expect(p.next, JSON.stringify(outflow)).toBeNull();
+      }
+      const confirmedWrong = recoveryPlan({ milestone: m({ status: "REFUNDED" }), project: { ...project, status: "SETTLING", totalRefunded: "1" },
+        outflows: [{ id: 0, milestone: 0, kind: "MILESTONE_REFUND", status: "CONFIRMED", amount: "1", recipient: "0x" + "99".repeat(20) }], chainTime: 5000, activeIndex: 0 });
+      expect(confirmedWrong.settled).toBe(false);
+      expect(confirmedWrong.steps[1].label).toMatch(/does not match/);
+    });
+
+    it("CONFIRMED without REFUNDED is not settled", () => {
+      const p = recoveryPlan({ milestone: m({ status: "REFUND_PENDING" }), project: { ...project, status: "SETTLING" },
+        outflows: [{ id: 0, milestone: 0, kind: "MILESTONE_REFUND", status: "CONFIRMED", amount: "1", recipient: A }], chainTime: 5000, activeIndex: 0 });
+      expect(p.settled).toBe(false);
+    });
+
+    it("reads the native balance, reporting an RPC failure instead of a number", async () => {
+      expect(await readContractBalance({ getBalance: async () => 7n }, P)).toMatchObject({ wei: 7n });
+      expect(await readContractBalance({ getBalance: async () => { throw new Error("refused"); } }, P)).toMatchObject({ wei: null, error: "refused" });
+    });
   });
 
   it("blocked by an open appeal or a missing deadline; unknown chain time never says eligible", () => {

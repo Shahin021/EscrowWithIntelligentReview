@@ -65,7 +65,9 @@ describe("controller keeps every transfer for history and recovery", () => {
 
     await c.refresh(client([refund], { status: "REFUND_PENDING", amount: "400" }), 200);
 
-    const plan = recoveryPlan({ milestone: c.state.milestones[0], project: c.state.project, outflows: c.state.allOutflows, chainTime: 200, activeIndex: 0 });
+    // The fixture's ledger is all zero, so a landed transfer leaves 0 wei.
+    c.state.project.inflightOut = "400";
+    const plan = recoveryPlan({ milestone: c.state.milestones[0], project: c.state.project, outflows: c.state.allOutflows, chainTime: 200, activeIndex: 0, balance: { wei: 0n } });
     const html = recoveryBlock(plan, { writable: true, busy: false, deadlineText: "x" });
 
     expect(plan.settled).toBe(false);
@@ -142,10 +144,41 @@ describe("views say what each source does and does not prove", () => {
     expect(html).toContain("disabled>Create project");
   });
 
-  it("an entry that may have been sent offers no resend, only a manual 'not sent' confirmation", () => {
-    const html = activityPanel({ entries: [{ id: "p1", label: "Fund", account: CLIENT, createdAt: 0, phase: "prompting" }], explorer: "https://e/" });
+  it("a possibly-sent entry offers a chain search and hash attach, and 'not sent' only after a releasable chain check", () => {
+    const base = { id: "p1", label: "Fund", account: CLIENT, createdAt: 0, phase: "prompting", possiblySent: true };
+    const before = activityPanel({ entries: [base], explorer: "https://e/" });
 
-    expect(html).toContain("I checked my wallet: it was not sent");
-    expect(html).not.toMatch(/resend|send again/i);
+    expect(before).toContain("Possibly sent");
+    expect(before).toContain("Look for it on chain");
+    expect(before).toContain("data-attach-form");
+    expect(before).not.toContain("data-release");
+    expect(before).not.toMatch(/resend|send again/i);
+
+    const advanced = activityPanel({ entries: [{ ...base, lastCheck: { releasable: false, reason: "This account has sent a transaction since the prompt" } }], explorer: "https://e/" });
+
+    expect(advanced).not.toContain("data-release");
+    expect(advanced).toContain("has sent a transaction since the prompt");
+
+    const clear = activityPanel({ entries: [{ ...base, lastCheck: { releasable: true, reason: "nonce has not advanced", search: { ok: true, from: "1", to: "9" } } }], explorer: "https://e/" });
+
+    expect(clear).toContain("data-release");
+    expect(clear).toContain("blocks 1–9");
+  });
+
+  it("an emitted refund never offers confirmation while the balance is unknown or the transfer is in flight", () => {
+    const html = recoveryBlock(
+      recoveryPlan({
+        milestone: { index: 0, amount: "400", status: "REFUND_PENDING", evidenceRecoveryDeadline: "1" },
+        project: { client: CLIENT, status: "SETTLING", inflightOut: "400", locked: "0", depositCreditHeld: "0", appealCreditHeld: "0", appealBondHeld: "0", queuedOut: "0", bouncedHeld: "0", unmatchedHeld: "0" },
+        outflows: [{ id: 0, milestone: 0, kind: "MILESTONE_REFUND", status: "EMITTED", amount: "400", recipient: CLIENT }],
+        chainTime: 10,
+        activeIndex: 0,
+        balance: { wei: 400n },
+      }),
+      { writable: true, busy: false, deadlineText: "x" },
+    );
+
+    expect(html).toContain("has not landed yet");
+    expect(html).not.toContain("data-recovery-action");
   });
 });

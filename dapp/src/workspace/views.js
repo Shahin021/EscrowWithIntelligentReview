@@ -337,12 +337,12 @@ export function finalityPanel({ project, rows, scan, busy, explorer, defaultFrom
 /* ------------------------------ activity ------------------------------ */
 
 const PHASE_TEXT = {
-  prompting: "Possibly sent — the page stopped before the wallet answered",
+  prompting: "Open — the page stopped before the wallet answered; it may have been sent",
   sent: "Sent; waiting for the EVM receipt",
   tracking: "Waiting for finality",
   done: "Result",
   "not-sent": "Not sent",
-  abandoned: "Marked not sent by you",
+  abandoned: "Not sent (shown by the chain: nonce unchanged)",
 };
 
 export function activityPanel({ entries, explorer, busyIds = new Set() }) {
@@ -352,16 +352,34 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
     .slice()
     .reverse()
     .map((e) => {
-      const status = e.phase === "done" ? e.verdict?.label || "Done" : PHASE_TEXT[e.phase] || e.phase;
+      const status =
+        e.phase === "done"
+          ? e.verdict?.label || "Done"
+          : e.phase === "prompting" && e.possiblySent
+            ? "Possibly sent — the wallet had it, but its answer was lost"
+            : PHASE_TEXT[e.phase] || e.phase;
       const ok = e.phase === "done" && e.verdict?.ok;
+      const busy = busyIds.has(e.id);
       const actions = [];
+      let extra = "";
 
-      if ((e.phase === "sent" || e.phase === "tracking") && !busyIds.has(e.id)) {
+      if ((e.phase === "sent" || e.phase === "tracking") && !busy) {
         actions.push(`<button class="btn btn-ghost btn-small" type="button" data-resume="${escape(e.id)}">Check again</button>`);
       }
 
       if (e.phase === "prompting") {
-        actions.push(`<button class="btn btn-ghost btn-small" type="button" data-abandon="${escape(e.id)}">I checked my wallet: it was not sent</button>`);
+        actions.push(`<button class="btn btn-ghost btn-small" type="button" data-check-sent="${escape(e.id)}" ${busy ? "disabled" : ""}>${busy ? "Checking…" : "Look for it on chain"}</button>`);
+
+        if (e.lastCheck?.releasable && !busy) {
+          actions.push(`<button class="btn btn-ghost btn-small" type="button" data-release="${escape(e.id)}">Confirm not sent (re-checks the chain)</button>`);
+        }
+
+        extra = `
+          ${e.lastCheck ? `<div class="meta">Last check: ${escape(e.lastCheck.reason)}${e.lastCheck.search?.ok ? ` Logs searched: blocks ${escape(e.lastCheck.search.from)}–${escape(e.lastCheck.search.to)}.` : e.lastCheck.search ? ` Log search unavailable: ${escape(e.lastCheck.search.reason)}.` : ""}</div>` : '<div class="meta">This action cannot be sent again until it is found on chain or the chain shows nothing was sent from this account.</div>'}
+          <form class="ws-inline" data-attach-form="${escape(e.id)}">
+            <label>Or paste the EVM hash from your wallet's activity <input name="hash" autocomplete="off" spellcheck="false" placeholder="0x… (64 hex)" /></label>
+            <button class="btn btn-ghost btn-small" type="submit">Check and attach</button>
+          </form>`;
       }
 
       return `<li class="ws-activity" data-phase="${escape(e.phase)}">
@@ -369,13 +387,15 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
           <div class="meta"><span class="${ok ? "ws-ok" : ""}">${escape(status)}</span>
             ${e.txId ? ` · <a href="${escape(explorer + "tx/" + e.txId)}" target="_blank" rel="noopener noreferrer">GenLayer ${escape(short(e.txId))}</a>` : ""}
             ${e.evmHash ? ` · EVM ${escape(short(e.evmHash))}` : ""}
-            ${e.error ? ` · ${escape(e.error)}` : ""}</div>
+            ${e.error && e.phase !== "prompting" ? ` · ${escape(e.error)}` : ""}
+            ${e.persistError ? ` · <b>not saved in this browser: ${escape(e.persistError)}</b>` : ""}</div>
+          ${extra}
           ${actions.length ? `<div class="ws-actions">${actions.join("")}</div>` : ""}
         </li>`;
     })
     .join("");
 
   return `<p class="card-title">Activity from this browser</p>
-    <p class="meta">Recorded before each wallet prompt and updated from the chain. An action that is unresolved here cannot be sent again until it is resolved.</p>
+    <p class="meta">Recorded durably before each wallet prompt and updated from the chain. An action that is still open here cannot be sent again until it is resolved on chain.</p>
     <ul class="ws-list">${rows}</ul>`;
 }

@@ -103,14 +103,43 @@ consensus result is AGREE or MAJORITY_AGREE. FINALIZED alone is not success.
   EVIDENCE_UNAVAILABLE, UNDER_REVIEW or REVIEW_STALLED, and no appeal is open.
 - **Who may act:** anyone may submit the recovery.
 - **Settlement:** the refund is shown as settled only when its transfer is
-  CONFIRMED and the milestone is REFUNDED. A passed deadline is shown as
-  "possible", never as "paid".
+  CONFIRMED, the milestone is REFUNDED, and the transfer is the expected
+  refund: recipient = client, a refund kind, this milestone, and the expected
+  amount (the milestone principal for `MILESTONE_REFUND`; at least the
+  principal and no more than the unreleased funding for
+  `PROJECT_REMAINDER_REFUND`). A passed deadline is shown as "possible",
+  never as "paid".
+- **Confirming a transfer:** EMITTED does not mean the native transfer has
+  landed. The live run showed it can arrive after the emitting transaction is
+  final. `confirm_outflow` is offered (in the recovery steps and on transfer
+  cards; the generic project-level button was removed) only when a fresh
+  `eth_getBalance` of the contract equals the ledger without the in-flight
+  amount: `locked + deposit_credit + appeal_credit + appeal_bond + queued_out
+  + bounced + unmatched`, the same sum the contract checks. The page states
+  each case:
+  - balance = ledger + in-flight amount: the transfer has not landed yet;
+  - balance unreadable: unknown, so confirmation stays disabled;
+  - any other balance, or in-flight ≠ the transfer amount: blocked, because
+    the contract would reject it.
+
+  Ledger and balance are re-read immediately before the wallet opens.
 
 ## Sending: no duplicates, resume after a stop
 
 The journal is local and is kept separately per network, project and account.
+It must be durable:
 
-1. **Before the prompt:** the intent is recorded.
+- it is written only through a strict path that reads every write back from
+  `localStorage`, with no in-memory fallback;
+- if storage is unavailable, full, silently dropping writes, or the journal is
+  corrupt, every write (including Create) is disabled with the reason shown,
+  while all reading keeps working;
+- a corrupt journal is never overwritten.
+
+1. **Before the prompt:** the account's pending nonce and the current block are
+   read as a baseline, and the intent, its exact expected calldata (or code)
+   and that baseline are recorded durably. If any of this fails, the wallet is
+   not opened.
 2. **Arming the guard:** the guard is armed for exactly one
    `eth_sendTransaction`, with the expected sender, recipient, value, chain
    and calldata. Constructor and code are decoded and compared.
@@ -126,9 +155,27 @@ The journal is local and is kept separately per network, project and account.
 After a refresh or a timeout:
 
 - the same steps resume from the stored ids;
-- an action that is still unresolved cannot be sent again;
-- an entry stopped before the wallet answered offers only "I checked my
-  wallet: it was not sent".
+- an action that is still unresolved cannot be sent again.
+
+**A missing hash is not proof that nothing was sent.** Once the guard has
+handed the transaction to the wallet, only an explicit rejection (EIP-1193
+`4001`) counts as "not sent". Any other failure (a disconnect, an extension
+crash, a timeout, a malformed answer, or a reload while the wallet was open)
+leaves the intent **possibly sent**. It stays open and blocks a resend. It is
+resolved only from the chain:
+
+1. **Found:** consensus `NewTransaction` logs by this account (and this
+   project) since the baseline block are searched. Each candidate's EVM
+   transaction is fetched and decoded, and attached only if it carries
+   exactly the recorded call from this account. Tracking then continues.
+   This also runs automatically on page load.
+2. **Pasted:** the user can paste the EVM hash from the wallet's activity.
+   It is attached only if it decodes to exactly this call.
+3. **Not sent:** offered only if a fresh check finds no matching transaction,
+   the account's pending and latest nonce both still equal the baseline, and
+   at least ten minutes have passed since the prompt, because a wallet can
+   still broadcast after a lost answer. If the nonce has advanced, or cannot
+   be read, the action stays open.
 
 Restoring a session uses only `eth_accounts` and `eth_chainId`. It opens no
 prompt, asks for no signature and sends no transaction. After an explicit
@@ -136,8 +183,30 @@ Disconnect, nothing is restored until you press Connect.
 
 ## Tests (offline)
 
-- `cd dapp && npm test`: 12 files, 183 tests.
+- `cd dapp && npm test`: 12 files, 199 tests.
   - The baseline had 8 files and 100 tests.
+  - Regression tests for the review findings, with the real SDK:
+    - forward → wallet broadcasts → answer lost → reload → retry refused
+      (one transaction only) → found in logs, attached and tracked to
+      success, and never releasable afterwards;
+    - forwarded but never broadcast: not releasable before the waiting
+      period, then released, then sendable again;
+    - nonce advanced without a match, or nonce and logs unreadable: the
+      action stays open;
+    - a pasted hash for a different call is refused, while the correct one
+      is attached;
+    - an explicit rejection after forwarding counts as not sent;
+    - an unreadable nonce baseline means nothing is sent;
+    - storage unavailable, full, silently dropping, or corrupt (left
+      untouched): nothing reaches the wallet;
+    - refund confirmation:
+      - transfer delayed: waiting;
+      - transfer landed: ready;
+      - balance unreadable: waiting;
+      - balance mismatch or in-flight mismatch: blocked;
+      - wrong recipient, milestone, amount or kind: never confirmed or
+        settled;
+      - CONFIRMED without REFUNDED: not settled.
   - Guard and sender tests drive the real genlayer-js 1.1.8 against a fake
     provider. They cover:
     - account and network change;
@@ -153,7 +222,13 @@ Disconnect, nothing is restored until you press Connect.
 - `npm run build`: passes.
 - Desktop (1366 px) and mobile (390 px) were checked with a mocked RPC and
   wallet. There was no horizontal overflow. The wallet saw only `eth_accounts`
-  and `eth_chainId`, and nothing at all after Disconnect plus reload.
+  and `eth_chainId`, and nothing at all after Disconnect plus reload. Three
+  more scenarios were checked:
+  - with `localStorage` blocked, zero write controls are enabled and the
+    reason is shown;
+  - a possibly-sent entry after reload is shown as such, with a chain check;
+  - a refund that is EMITTED but has not landed shows no enabled confirm
+    anywhere. Once the balance shows it landed, confirm is enabled.
 
 These are offline results. They are not live proof.
 
@@ -171,9 +246,16 @@ Never use `0x0a578Ce8…ea8a` or the Registry `0x33c5A0F5…1f99` for writes.
    the recovery deadline. Then recover, confirm the refund and close. Check
    that "settled" appears only after CONFIRMED.
 5. **Journal and reload:** reload the page while a transaction is tracking.
-   Check that it resumes and that nothing is re-sent.
-6. **Wallet changes:** reject one signature, switch account and switch network.
-7. **Log search:** search the consensus logs from the deploy block. Check
+   Check that it resumes and that nothing is re-sent. Also reload while the
+   MetaMask prompt is open, then approve it. Check that the entry is found in
+   the logs and attached, not re-sent.
+6. **Delayed refund transfer:** after recovery, watch the transfer card. It
+   should say "has not landed yet" until `eth_getBalance` drops by the refund
+   amount, and only then offer confirmation.
+7. **Storage:** in a private window with storage blocked, check that writes
+   are disabled with the reason.
+8. **Wallet changes:** reject one signature, switch account and switch network.
+9. **Log search:** search the consensus logs from the deploy block. Check
    whether the RPC allows `eth_getLogs`, and what range it allows.
 
 ## Windows PowerShell

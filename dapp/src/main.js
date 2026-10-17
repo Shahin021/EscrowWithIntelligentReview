@@ -20,15 +20,15 @@ import { createLogo, PHASE_BUSY, PHASE_ERROR, PHASE_IDLE } from "./logo.js";
 import { withReadTimeout } from "./receipt-panel.js";
 import lifecycle from "./lifecycle-transactions.json";
 
-import { browserStorage } from "./workspace/storage.js";
+import { browserStorage, StorageUnavailable } from "./workspace/storage.js";
 import { controllerConfig, projectLink, resolveWorkspace, sameAddress } from "./workspace/project.js";
-import { createJournal, PHASE_ABANDONED } from "./workspace/journal.js";
+import { createJournal } from "./workspace/journal.js";
 import { createGuardedProvider } from "./workspace/guard.js";
-import { advance, DuplicatePending, sendTracked } from "./workspace/sender.js";
+import { advance, attachEvmHash, checkPossiblySent, DuplicatePending, releaseIfNotSent, sendTracked } from "./workspace/sender.js";
 import { connectSession, disconnectSession, isExplicitlyDisconnected, restoreSession } from "./workspace/session.js";
 import { createProjectBook, inspectProject, isRegistered, registryCandidates } from "./workspace/projects.js";
 import { readAttempts, readCriteria, milestoneTimeline } from "./workspace/history.js";
-import { readChainTime, recoveryPlan } from "./workspace/recovery.js";
+import { confirmReadiness, readChainTime, readContractBalance, recoveryPlan } from "./workspace/recovery.js";
 import { classifyReceipt, collectProjectTransactions, scanNewTransactionLogs } from "./workspace/finality.js";
 import { estimateDeployGas, OBSERVED_GAS_CAP, projectGas, validateProject, verifyCreatedProject } from "./workspace/create.js";
 import { ARTIFACT, loadArtifact } from "./workspace/artifact.js";
@@ -64,6 +64,17 @@ const guard = provider
   : null;
 
 if (project && workspace.projectSource === "link") book.remember(network, project, "link");
+
+/** The journal must be durable before any wallet prompt; re-checked before each write. */
+let journalHealth = journal.health();
+
+function journalBlocker() {
+  journalHealth = journal.health();
+
+  return journalHealth.ok ? null : journalHealth.reason;
+}
+
+let balance = null; // { wei, error, readAt }: the project's native balance
 
 let readClient = null;
 const rc = () => {
@@ -148,7 +159,8 @@ function showMessage(text, state = TX_FAILED) {
 function showEntry(entry) {
   if (!entry) return;
 
-  if (entry.phase === "prompting") showMessage(`${entry.label}: confirm in your wallet`, TX_SUBMITTED);
+  if (entry.phase === "prompting" && entry.possiblySent) showMessage(`${entry.label}: the wallet's answer was lost — it may have been sent`, TX_FAILED);
+  else if (entry.phase === "prompting") showMessage(`${entry.label}: confirm in your wallet`, TX_SUBMITTED);
   else if (entry.phase === "sent") showMessage(`${entry.label}: sent · reading the EVM receipt`, TX_SUBMITTED);
   else if (entry.phase === "tracking") showMessage(`${entry.label}: ${entry.lastStatus || "waiting for finality"}`, TX_ACCEPTED);
   else if (entry.phase === "done" && entry.verdict?.ok) {
@@ -219,7 +231,7 @@ function collectInput(scope) {
 }
 
 function actionBlock(action, scope, milestoneIndex, outflowId) {
-  const enabled = controller.writesEnabled && !sending;
+  const enabled = controller.writesEnabled && !sending && journalHealth.ok;
   const method = methodFor(action);
 
   return `
@@ -264,6 +276,7 @@ function renderNetworkPanel() {
     project ? controller.interfaceWarning && controller.state.project ? controller.interfaceWarning : "" : "",
     controller.reconnectWarning,
     controller.networkWarning,
+    journalHealth.ok ? "" : journalHealth.reason,
   ].filter(Boolean).join(" ");
 
   const node = el("network-warning");
@@ -397,6 +410,7 @@ function planFor(index) {
     outflows: controller.state.allOutflows,
     chainTime: chainSeconds(),
     activeIndex: activeIndex(),
+    balance,
   });
 }
 
@@ -404,7 +418,7 @@ function recoveryHtml(index) {
   const m = controller.state.milestones[index];
 
   return recoveryBlock(planFor(index), {
-    writable: controller.writesEnabled,
+    writable: controller.writesEnabled && journalHealth.ok,
     busy: sending,
     deadlineText: timestamp(m.evidenceRecoveryDeadline) || "not set",
   });
@@ -490,7 +504,9 @@ function renderMilestones() {
 }
 
 function renderProjectActions() {
-  const actions = controller.projectActions();
+  // Confirmation lives on each transfer card, where it is gated on the
+  // contract balance showing that the transfer has actually left.
+  const actions = controller.projectActions().filter((a) => a.action !== "confirm_outflow");
 
   el("actions").innerHTML = actions.length
     ? `<article class="card" style="--delay:200ms"><p class="card-title">Project actions</p>
@@ -515,7 +531,17 @@ function renderOutflows() {
             <div class="ledger-row"><span class="k">Milestone</span><span class="v">${row.milestone < 0 ? "Project" : row.milestone + 1}</span></div>
           </div>
           ${row.redirectBlockedReason ? `<p class="meta" style="margin-top:10px">${escape(row.redirectBlockedReason)}</p>` : ""}
-          ${row.actions.map((action) => actionBlock(action, `o${row.id}-${action}`, row.milestone, row.id)).join("")}
+          ${row.actions.map((action) => {
+            if (action !== "confirm_outflow") return actionBlock(action, `o${row.id}-${action}`, row.milestone, row.id);
+
+            // EMITTED is not "transferred": offer confirmation only when the
+            // contract's native balance shows the transfer has left.
+            const r = confirmReadiness(row, { project: controller.state.project, balance });
+
+            return r.ready
+              ? `<p class="meta" style="margin-top:10px">${escape(r.detail)}</p>${actionBlock(action, `o${row.id}-${action}`, row.milestone, row.id)}`
+              : `<p class="meta ws-wait" style="margin-top:10px">${escape(r.detail)}</p>`;
+          }).join("")}
         </article>`,
     )
     .join("");
@@ -546,6 +572,38 @@ async function runAction(action, { milestoneIndex = 0, outflowId, input = {} } =
     return;
   }
 
+  const blocked = journalBlocker();
+
+  if (blocked) {
+    showMessage(blocked);
+    render();
+
+    return;
+  }
+
+  if (action === "confirm_outflow") {
+    // Fresh ledger and balance right before asking the wallet.
+    try {
+      await controller.refresh(rc(), nowForPredicates());
+    } catch (error) {
+      showMessage(explainError(error));
+
+      return;
+    }
+
+    balance = await readContractBalance(rc(), project);
+
+    const outflow = controller.state.allOutflows.find((o) => o.id === outflowId);
+    const r = confirmReadiness(outflow, { project: controller.state.project, balance });
+
+    if (!r.ready) {
+      showMessage(r.detail, r.state === "waiting" ? TX_IDLE : TX_FAILED);
+      render();
+
+      return;
+    }
+  }
+
   const scoped = isProjectScoped(action) || action === "confirm_outflow" || action === "redirect_outflow";
   const label = `${methodFor(action).label}${scoped ? (outflowId !== undefined ? ` · transfer #${outflowId}` : "") : ` · milestone ${milestoneIndex + 1}`}`;
 
@@ -571,6 +629,9 @@ async function runAction(action, { milestoneIndex = 0, outflowId, input = {} } =
     if (error instanceof DuplicatePending) {
       showMessage(error.message, TX_SUBMITTED);
       resume(error.entry.id);
+    } else if (error instanceof StorageUnavailable) {
+      journalBlocker();
+      showMessage(error.message);
     } else if (error.entry) {
       showEntry(error.entry);
     } else {
@@ -586,16 +647,26 @@ async function runAction(action, { milestoneIndex = 0, outflowId, input = {} } =
 async function resume(id, { polls = 1 } = {}) {
   const entry = journal.get(id);
 
-  if (!entry || resuming.has(id) || !entry.evmHash && !entry.txId) return;
+  if (!entry || resuming.has(id)) return;
+
+  const possiblySent = entry.phase === "prompting";
+
+  if (!possiblySent && !entry.evmHash && !entry.txId) return;
 
   resuming.add(id);
   renderActivity();
+  renderCreate();
 
   try {
-    const next = await advance(entry, { readClient: rc(), consensus, journal, polls });
+    // A prompt whose answer was lost is looked for on chain, never re-sent.
+    const next = possiblySent
+      ? (await checkPossiblySent(entry, { readClient: rc(), consensus, journal })).entry
+      : await advance(entry, { readClient: rc(), consensus, journal, polls });
 
     if (next.kind === "deploy") await afterDeploy(next);
     if (sameAddress(next.project, project) || next.kind === "deploy") showEntry(next);
+  } catch (error) {
+    showMessage(explainError(error));
   } finally {
     resuming.delete(id);
     renderActivity();
@@ -655,9 +726,43 @@ function renderActivity() {
 
 function bindActivity(node) {
   node.querySelectorAll("[data-resume]").forEach((b) => b.addEventListener("click", () => resume(b.dataset.resume)));
-  node.querySelectorAll("[data-abandon]").forEach((b) =>
-    b.addEventListener("click", () => {
-      journal.update(b.dataset.abandon, { phase: PHASE_ABANDONED });
+  node.querySelectorAll("[data-check-sent]").forEach((b) => b.addEventListener("click", () => resume(b.dataset.checkSent)));
+  node.querySelectorAll("[data-release]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const entry = journal.get(b.dataset.release);
+
+      if (!entry) return;
+
+      b.disabled = true;
+
+      try {
+        // Re-checked on chain at the moment of release; never on a stale result.
+        const r = await releaseIfNotSent(entry, { readClient: rc(), consensus, journal });
+
+        showMessage(r.released ? `${entry.label}: confirmed not sent; it can be sent again.` : r.check.reason, r.released ? TX_IDLE : TX_FAILED);
+      } catch (error) {
+        showMessage(explainError(error));
+      }
+
+      renderActivity();
+      renderCreate();
+    }),
+  );
+  node.querySelectorAll("[data-attach-form]").forEach((f) =>
+    f.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const entry = journal.get(f.dataset.attachForm);
+
+      try {
+        const next = await attachEvmHash(entry, f.hash.value.trim(), { readClient: rc(), consensus, journal });
+
+        if (next.kind === "deploy") await afterDeploy(next);
+        showEntry(next);
+      } catch (error) {
+        showMessage(error.message || String(error));
+      }
+
       renderActivity();
       renderCreate();
     }),
@@ -668,6 +773,9 @@ function bindActivity(node) {
 function resumeOpenEntries() {
   for (const e of journal.list({ network })) {
     if ((e.phase === "sent" || e.phase === "tracking") && (e.evmHash || e.txId)) resume(e.id);
+    // A prompt left open by a reload or a lost wallet answer: look for it on
+    // chain (read-only). It is released only by an explicit, re-checked action.
+    else if (e.phase === "prompting" && e.expect) resume(e.id);
   }
 }
 
@@ -924,6 +1032,7 @@ async function ensureArtifact() {
 }
 
 function deployBlocker() {
+  if (!journalHealth.ok) return journalHealth.reason;
   if (artifactError) return artifactError;
   if (!artifact) return "Loading the reviewed contract artifact…";
   if (!controller.state.account) return "Connect a wallet to create a project.";
@@ -1105,7 +1214,12 @@ function bindCreate(node) {
 }
 
 async function deploy() {
-  if (deploying || deployBlocker()) return;
+  journalBlocker();
+  if (deploying || deployBlocker()) {
+    renderCreate();
+
+    return;
+  }
 
   deploying = true;
   sending = true;
@@ -1146,7 +1260,10 @@ async function deploy() {
     await afterDeploy(journal.get(entry.id));
   } catch (error) {
     if (error instanceof DuplicatePending) showMessage(error.message, TX_SUBMITTED);
-    else if (error.entry) showEntry(error.entry);
+    else if (error instanceof StorageUnavailable) {
+      journalBlocker();
+      showMessage(error.message);
+    } else if (error.entry) showEntry(error.entry);
     else showMessage(explainError(error));
   } finally {
     deploying = false;
@@ -1236,12 +1353,14 @@ async function refresh() {
   }
 
   loading = !controller.state.project;
+  journalBlocker();
   render();
 
   try {
     await refreshChainTime();
     // Reads always use the plain RPC client, never the wallet.
     await controller.refresh(rc(), nowForPredicates());
+    balance = await readContractBalance(rc(), project);
     await loadHistory();
   } catch (error) {
     showMessage(explainError(error));
@@ -1260,6 +1379,7 @@ setInterval(async () => {
   if (!controller.state.project || !Array.from(slots).some((s) => s.innerHTML.trim())) return;
 
   await refreshChainTime();
+  balance = await readContractBalance(rc(), project);
   slots.forEach((slot) => {
     const index = Number(slot.dataset.milestone);
 

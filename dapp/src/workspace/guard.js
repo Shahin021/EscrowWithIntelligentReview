@@ -17,6 +17,21 @@ import { decodeFunctionData, fromRlp, toHex, zeroAddress } from "viem";
 
 const lower = (value) => String(value || "").toLowerCase();
 
+/**
+ * True only for an explicit refusal by the user or wallet (EIP-1193 4001).
+ * Anything else after a transaction was handed to the wallet is ambiguous.
+ */
+export function isUserRejection(error) {
+  let e = error;
+
+  for (let depth = 0; e && depth < 6; depth += 1) {
+    if (e.code === 4001 || /user rejected|user denied|rejected the request/i.test(e.message || "")) return true;
+    e = e.cause;
+  }
+
+  return false;
+}
+
 export class GuardRefusal extends Error {
   constructor(message) {
     super(message);
@@ -154,11 +169,25 @@ export function createGuardedProvider({ provider, chainId, consensus, log = () =
     s.forwarded = true;
     log("wallet_prompt", { functionName: s.expect.functionName || "deploy" });
 
-    const hash = await provider.request(args);
+    let hash;
 
-    if (typeof hash === "string") {
+    try {
+      hash = await provider.request(args);
+    } catch (error) {
+      // The transaction has left this page. Only an explicit rejection proves
+      // it was not sent; a disconnect, timeout or any other error after this
+      // point may have happened after the wallet broadcast it.
+      if (isUserRejection(error)) s.rejected = error;
+      else s.ambiguous = error;
+
+      throw error;
+    }
+
+    if (typeof hash === "string" && /^0x[0-9a-fA-F]{64}$/.test(hash)) {
       s.evmHash = hash;
       s.onSent?.(hash);
+    } else {
+      s.ambiguous = new Error(`The wallet answered with ${JSON.stringify(hash)?.slice(0, 80)} instead of a transaction hash.`);
     }
 
     return hash;
@@ -188,6 +217,7 @@ export function createGuardedProvider({ provider, chainId, consensus, log = () =
           // The SDK rewraps errors; keep the real reason on the slot.
           if (s) {
             if (s.evmHash) s.lateRefusal = error;
+            else if (s.forwarded) s.afterForward = s.afterForward || error; // classified above
             else s.refusal = error;
           }
 

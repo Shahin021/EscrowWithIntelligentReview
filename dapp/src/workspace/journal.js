@@ -8,9 +8,17 @@
  * earlier one is unresolved.
  *
  * Entries are separated by network, project and account. The journal is a
- * convenience record of what this browser sent; it is not evidence of what
- * the chain did, which is always re-read from the network.
+ * record of what this browser sent; it is not evidence of what the chain did,
+ * which is always re-read from the network.
+ *
+ * Because the journal is what stops a second send, it must be durable: it is
+ * written only through storage.writeStrict (verified read-back, no memory
+ * fallback), a journal that cannot be read or parsed is never overwritten,
+ * and create() refuses to record an intent unless that write is durable. A
+ * caller must not open the wallet when create() throws.
  */
+
+import { jsonReplacer, StorageUnavailable } from "./storage.js";
 
 const KEY = "escrow-workspace:v2:journal";
 const MAX_ENTRIES = 300;
@@ -39,10 +47,39 @@ export function createJournal(storage, { now = () => Date.now(), randomId } = {}
     randomId ||
     (() => `${now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
-  const all = () => {
-    const value = storage.readJson(KEY, []);
+  /** Strict read: throws StorageUnavailable when unreadable or corrupt. */
+  const readAll = () => {
+    const raw = storage.readStrict(KEY);
 
-    return Array.isArray(value) ? value.filter((e) => e && typeof e === "object" && e.id) : [];
+    if (raw === null || raw === undefined) return [];
+
+    let value;
+
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      value = null;
+    }
+
+    if (!Array.isArray(value) || value.some((e) => !e || typeof e !== "object" || !e.id)) {
+      throw new StorageUnavailable(
+        "Writes are disabled: this browser's transaction journal is unreadable (corrupt). " +
+          "It was left untouched so no record is lost; read-only features still work.",
+      );
+    }
+
+    return value;
+  };
+
+  /** Lenient read for display: never throws. */
+  const all = () => {
+    try {
+      return readAll();
+    } catch {
+      const value = storage.readJson(KEY, []);
+
+      return Array.isArray(value) ? value.filter((e) => e && typeof e === "object" && e.id) : [];
+    }
   };
 
   const save = (entries) => {
@@ -51,7 +88,7 @@ export function createJournal(storage, { now = () => Date.now(), randomId } = {}
     const settled = entries.filter((e) => !UNRESOLVED.has(e.phase));
     const keep = settled.slice(Math.max(0, settled.length - (MAX_ENTRIES - unresolved.length)));
 
-    storage.writeJson(KEY, [...unresolved, ...keep].sort((a, b) => a.createdAt - b.createdAt));
+    storage.writeStrict(KEY, JSON.stringify([...unresolved, ...keep].sort((a, b) => a.createdAt - b.createdAt), jsonReplacer));
   };
 
   return {
@@ -72,10 +109,24 @@ export function createJournal(storage, { now = () => Date.now(), randomId } = {}
     findUnresolved(binding) {
       const key = bindingKey(binding);
 
-      return all().find((e) => e.binding === key && UNRESOLVED.has(e.phase)) || null;
+      return readAll().find((e) => e.binding === key && UNRESOLVED.has(e.phase)) || null;
     },
 
+    /** { ok, reason }: may an intent be recorded durably right now? */
+    health() {
+      try {
+        readAll();
+        storage.probe();
+
+        return { ok: true, reason: null };
+      } catch (error) {
+        return { ok: false, reason: error.message || String(error) };
+      }
+    },
+
+    /** Records an intent durably or throws StorageUnavailable. */
     create(entry) {
+      const existing = readAll(); // throws when unreadable or corrupt
       const record = {
         id: makeId(),
         createdAt: now(),
@@ -89,13 +140,18 @@ export function createJournal(storage, { now = () => Date.now(), randomId } = {}
         binding: bindingKey(entry),
       };
 
-      save([...all(), record]);
+      save([...existing, record]);
+
+      if (!readAll().some((e) => e.id === record.id)) {
+        throw new StorageUnavailable("Writes are disabled: the journal entry was not kept by browser storage.");
+      }
 
       return record;
     },
 
+    /** Throws StorageUnavailable when the update cannot be stored durably. */
     update(id, patch) {
-      const entries = all();
+      const entries = readAll();
       const index = entries.findIndex((e) => e.id === id);
 
       if (index < 0) return null;
@@ -111,6 +167,10 @@ export function createJournal(storage, { now = () => Date.now(), randomId } = {}
           next.identifierConflict = { field, ignored: patch[field] };
         }
       }
+
+      // The expectation (exact calldata or code) is kept only while the entry
+      // is unresolved, to match a possibly-sent transaction found later.
+      if (!UNRESOLVED.has(next.phase)) delete next.expect;
 
       entries[index] = next;
       save(entries);

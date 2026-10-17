@@ -153,6 +153,8 @@ describe("browser deployment through the real SDK and the guard", () => {
     h.guard = guard; h.CREATED = CREATED; h.CONSENSUS = CONSENSUS;
     h.journal = createJournal(safeStorage(memoryStorage()));
     h.readClient = {
+      getTransactionCount: async () => 1n,
+      getBlockNumber: async () => 1n,
       getTransactionReceipt: async ({ hash }) => h.receipts.get(hash),
       getTransaction: async () => ({ statusName: "FINALIZED", txExecutionResultName: "FINISHED_WITH_RETURN", resultName: "AGREE", recipient: CREATED }),
     };
