@@ -17,19 +17,27 @@
  *
  * "No hash came back" is not "nothing was sent". Once the guard has handed
  * the transaction to the wallet, only an explicit rejection (EIP-1193 4001)
- * proves it was not sent. Any other failure (a disconnect, a timeout, a
- * crashed extension, a reload) leaves the intent open as possibly sent. It
- * is resolved only by finding the transaction on chain (consensus
- * NewTransaction logs by this account, decoded and matched against the exact
- * expected call) or by chain evidence that nothing was sent: the account's
- * nonce has not advanced since the prompt.
+ * delivered to this page proves it was not sent. Any other failure (a
+ * disconnect, a timeout, a crashed extension, a reload) leaves the intent
+ * open as possibly sent, because the wallet request may still be pending and
+ * be approved at any later time. Time passing and an unchanged nonce prove
+ * nothing about a pending request, so they never release it.
+ *
+ * Just before forwarding, the exact transaction (its full EVM input, which
+ * includes the SDK's validUntil) is written durably to the journal. That
+ * gives two guarantees after any stop:
+ *   - an open intent WITHOUT that record never reached the wallet and can be
+ *     released safely;
+ *   - an intent WITH it is resolved only by finding its own transaction on
+ *     chain: same sender, consensus target, value and exact input, a nonce at
+ *     or above the baseline taken before the prompt, a block at or after the
+ *     prompt block, and a hash no other journal entry has claimed.
  */
 
 import { decodeEventLog } from "viem";
 
 import { classifyReceipt } from "./finality.js";
 import {
-  PHASE_ABANDONED,
   PHASE_DONE,
   PHASE_NOT_SENT,
   PHASE_PROMPTING,
@@ -268,6 +276,19 @@ export async function sendTracked(request, {
     minGas: request.minGas,
     maxGas: request.maxGas,
     expect,
+    onBeforeForward: (tx) => {
+      // Strict: throws (and the guard refuses to forward) unless durable and
+      // the intent is still open (another tab may have resolved it).
+      const latest = journal.get(entry.id);
+
+      if (!latest || latest.phase !== PHASE_PROMPTING) throw new Error("this action is no longer open in the journal");
+
+      entry = journal.update(entry.id, {
+        forwardedAt: Date.now(),
+        forwarded: { data: tx.data, from: tx.from, to: tx.to, value: tx.value ?? "0x0", nonceHint: tx.nonce ?? null },
+      });
+      onUpdate(entry);
+    },
     onSent: (hash) => persist({ phase: PHASE_SENT, evmHash: hash, possiblySent: false }),
   });
 
@@ -386,8 +407,18 @@ export async function sendTracked(request, {
 
 /* ------------------ resolving a possibly-sent intent ------------------ */
 
-/** Does this EVM transaction carry exactly the recorded call from this account? */
-async function matchesEntry(readClient, consensus, entry, evmHash) {
+/**
+ * Is this EVM transaction the one this intent handed to the wallet?
+ * Calldata equality alone is not enough: an earlier identical call has the
+ * same calldata. The candidate must match the recorded forwarded input
+ * exactly and fall inside this intent's nonce and block bounds, and no other
+ * journal entry may already own it. Returns a list of problems.
+ */
+export async function matchesEntry(readClient, consensus, entry, evmHash, { journal } = {}) {
+  if (!entry.forwardedAt || !entry.forwarded?.data) {
+    return ["this action never reached the wallet, so no transaction can belong to it"];
+  }
+
   const tx = await readClient.request({ method: "eth_getTransactionByHash", params: [evmHash] });
 
   if (!tx) return ["transaction not found on Bradbury"];
@@ -396,31 +427,53 @@ async function matchesEntry(readClient, consensus, entry, evmHash) {
 
   if (lower(tx.from) !== lower(entry.account)) problems.push(`sent from ${tx.from}, not ${entry.account}`);
   if (lower(tx.to) !== lower(consensus.address)) problems.push("not a consensus transaction");
-  if (BigInt(tx.value ?? 0) !== BigInt(entry.value ?? 0)) problems.push(`value ${BigInt(tx.value ?? 0)} differs`);
+  if (BigInt(tx.value ?? 0) !== BigInt(entry.forwarded.value ?? 0)) problems.push(`value ${BigInt(tx.value ?? 0)} differs`);
+  if (lower(tx.input) !== lower(entry.forwarded.data)) {
+    problems.push("its input is not the exact transaction this page handed to the wallet");
+  }
+
   if (entry.expect) {
     problems.push(...checkAddTransaction(tx.input, { consensusAbi: consensus.abi, sender: entry.account, expect: entry.expect }));
-  } else {
-    problems.push("this record has no stored expectation to match against");
   }
+
+  if (entry.nonceBefore !== undefined && entry.nonceBefore !== null) {
+    if (tx.nonce === undefined || tx.nonce === null) problems.push("its nonce is unknown");
+    else if (BigInt(tx.nonce) < BigInt(entry.nonceBefore)) {
+      problems.push(`its nonce ${BigInt(tx.nonce)} is below this action's baseline ${entry.nonceBefore}, so it was sent before this action`);
+    }
+  } else {
+    problems.push("this record has no nonce baseline");
+  }
+
+  if (tx.blockNumber !== null && tx.blockNumber !== undefined && entry.promptBlock !== undefined && entry.promptBlock !== null) {
+    if (BigInt(tx.blockNumber) < BigInt(entry.promptBlock)) {
+      problems.push(`it was mined in block ${BigInt(tx.blockNumber)}, before this action's prompt (block ${entry.promptBlock})`);
+    }
+  }
+
+  const owner = journal?.list({}).find((e) => e.id !== entry.id && e.evmHash && lower(e.evmHash) === lower(evmHash));
+
+  if (owner) problems.push(`it already belongs to another recorded action (${owner.label || owner.functionName})`);
 
   return problems;
 }
 
 /**
- * Read-only check of a possibly-sent intent:
- *   1. search consensus NewTransaction logs by this account since the prompt
- *      block, and match each candidate's EVM input against the exact call;
- *   2. compare the account's nonce with the baseline taken before the prompt.
- *
- * A single match is attached and tracked. The intent becomes releasable only
- * when nothing matched AND both the pending and latest nonce still equal the
- * baseline, i.e. the account has sent nothing since the prompt.
+ * Read-only search for the transaction a possibly-sent intent handed to the
+ * wallet: consensus NewTransaction logs by this account (and project) from
+ * the prompt block on, each candidate checked by matchesEntry(). Exactly one
+ * match is attached and tracked. Nothing here ever releases the intent:
+ * not finding it (yet) is not evidence that it was not sent.
  */
-export const RELEASE_MIN_AGE_MS = 10 * 60 * 1000;
-
-export async function checkPossiblySent(entry, { readClient, consensus, journal, chunk = 5000n, maxChunks = 40, now = () => Date.now(), minAgeMs = RELEASE_MIN_AGE_MS }) {
-  const result = { at: now(), found: [], search: null, nonce: null, releasable: false, reason: "" };
+export async function checkPossiblySent(entry, { readClient, consensus, journal, chunk = 5000n, maxChunks = 40, now = () => Date.now() }) {
+  const result = { at: now(), found: [], rejected: [], search: null, nonce: null, reason: "" };
   const event = consensus.abi.find((e) => e.type === "event" && e.name === "NewTransaction");
+
+  if (!entry.forwardedAt) {
+    result.reason = "This action never reached the wallet.";
+
+    return { entry, check: result };
+  }
 
   try {
     const latest = BigInt(await readClient.getBlockNumber());
@@ -439,8 +492,14 @@ export async function checkPossiblySent(entry, { readClient, consensus, journal,
       });
 
       for (const log of logs) {
-        if (!log.transactionHash || result.found.includes(log.transactionHash)) continue;
-        if ((await matchesEntry(readClient, consensus, entry, log.transactionHash)).length === 0) result.found.push(log.transactionHash);
+        const hash = log.transactionHash;
+
+        if (!hash || result.found.includes(hash) || result.rejected.some((r) => r.hash === hash)) continue;
+
+        const problems = await matchesEntry(readClient, consensus, entry, hash, { journal });
+
+        if (problems.length === 0) result.found.push(hash);
+        else result.rejected.push({ hash, problems });
       }
 
       cursor = upper + 1n;
@@ -453,29 +512,22 @@ export async function checkPossiblySent(entry, { readClient, consensus, journal,
   }
 
   try {
-    const [pending, mined] = await Promise.all([
-      readClient.getTransactionCount({ address: entry.account, blockTag: "pending" }),
-      readClient.getTransactionCount({ address: entry.account, blockTag: "latest" }),
-    ]);
-    const before = BigInt(entry.nonceBefore);
+    const pending = await readClient.getTransactionCount({ address: entry.account, blockTag: "pending" });
 
-    result.nonce = { before: String(before), pending: String(pending), latest: String(mined), advanced: BigInt(pending) > before || BigInt(mined) > before };
+    result.nonce = { before: String(entry.nonceBefore), pending: String(pending) };
   } catch (error) {
     result.nonce = { error: errorText(error) };
   }
 
-  if (result.found.length) {
-    result.reason = `Found on chain: ${result.found[0]}${result.found.length > 1 ? ` (and ${result.found.length - 1} more identical)` : ""}.`;
-  } else if (result.nonce?.advanced === false && now() - Number(entry.createdAt || 0) < minAgeMs) {
-    // A wallet can still broadcast shortly after its answer was lost.
-    result.reason = `No matching transaction yet and the nonce has not advanced. A wallet can still broadcast after a lost answer, so this can be confirmed as not sent from ${new Date(Number(entry.createdAt || 0) + minAgeMs).toISOString().slice(11, 16)} UTC.`;
-  } else if (result.nonce?.advanced === false) {
-    result.releasable = true;
-    result.reason = "No matching transaction was found and this account's nonce has not advanced since the prompt, at least ten minutes ago: no transaction was sent from it.";
-  } else if (result.nonce?.advanced) {
-    result.reason = `This account has sent a transaction since the prompt (nonce ${result.nonce.before} → ${result.nonce.pending}) but it was not matched${result.search?.ok ? (result.search.complete ? "" : " in the blocks searched so far") : " (log search unavailable)"}. Add its EVM hash from your wallet's activity to check it.`;
+  if (result.found.length === 1) {
+    result.reason = `Found on chain: ${result.found[0]}.`;
+  } else if (result.found.length > 1) {
+    result.reason = `${result.found.length} transactions match this action exactly; none is attached automatically. Paste the right hash from your wallet's activity.`;
   } else {
-    result.reason = `The account's nonce could not be read (${result.nonce?.error}); the action stays open.`;
+    result.reason =
+      "Not found on chain" +
+      (result.search?.ok ? ` in blocks ${result.search.from}–${result.search.to}` : ` (log search unavailable: ${result.search?.reason})`) +
+      ". It stays open: the wallet request may still be pending and could be approved later. Approve or reject it in your wallet; once it is on chain it is attached automatically.";
   }
 
   let current = entry;
@@ -486,25 +538,23 @@ export async function checkPossiblySent(entry, { readClient, consensus, journal,
     /* the check result is still returned */
   }
 
-  if (result.found.length) {
-    current = journal.update(entry.id, {
-      phase: PHASE_SENT,
-      evmHash: result.found[0],
-      possiblySent: false,
-      foundOnChain: true,
-      duplicatesFound: result.found.slice(1),
-    });
+  if (result.found.length === 1) {
+    current = journal.update(entry.id, { phase: PHASE_SENT, evmHash: result.found[0], possiblySent: false, foundOnChain: true });
     current = await advance(current, { readClient, consensus, journal, polls: 1 });
   }
 
   return { entry: current, check: result };
 }
 
-/** Attach an EVM hash the user copied from the wallet, after verifying it. */
+/** Attach an EVM hash the user copied from the wallet, after verifying it is this intent's own. */
 export async function attachEvmHash(entry, evmHash, { readClient, consensus, journal }) {
   if (!HASH.test(String(evmHash))) throw new Error("An EVM transaction hash is 0x followed by 64 hex characters.");
 
-  const problems = await matchesEntry(readClient, consensus, entry, evmHash);
+  const latest = journal.get(entry.id) || entry;
+
+  if (latest.phase !== PHASE_PROMPTING) throw new Error("This action is no longer open.");
+
+  const problems = await matchesEntry(readClient, consensus, latest, evmHash, { journal });
 
   if (problems.length) throw new Error(`That transaction is not this action: ${problems.join("; ")}.`);
 
@@ -513,16 +563,22 @@ export async function attachEvmHash(entry, evmHash, { readClient, consensus, jou
   return advance(current, { readClient, consensus, journal, polls: 1 });
 }
 
-/** Release a possibly-sent intent only when a fresh chain check shows nothing was sent. */
-export async function releaseIfNotSent(entry, deps) {
-  const { entry: checked, check } = await checkPossiblySent(entry, deps);
+/**
+ * Release an open intent only when it provably never reached the wallet:
+ * no forwarded record was written, and that record is always written before
+ * forwarding. A forwarded intent is never released here.
+ */
+export function releaseIfNeverForwarded(entry, { journal }) {
+  const latest = journal.get(entry.id);
 
-  if (!check.releasable || checked.phase !== PHASE_PROMPTING) return { released: false, entry: checked, check };
+  if (!latest || latest.phase !== PHASE_PROMPTING || latest.forwardedAt) return { released: false, entry: latest };
 
   return {
     released: true,
-    entry: deps.journal.update(entry.id, { phase: PHASE_ABANDONED, releasedAfter: check }),
-    check,
+    entry: journal.update(entry.id, {
+      phase: PHASE_NOT_SENT,
+      error: "Never reached the wallet: the page stopped before the transaction was handed over.",
+    }),
   };
 }
 

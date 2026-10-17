@@ -8,7 +8,7 @@ import { testnetBradbury } from "genlayer-js/chains";
 import { encodeAbiParameters, encodeEventTopics, keccak256, toHex } from "viem";
 
 import { createGuardedProvider, checkAddTransaction, expectedCallData } from "../src/workspace/guard.js";
-import { sendTracked, DuplicatePending, advance, newTransactionFromReceipt, checkPossiblySent, releaseIfNotSent, attachEvmHash } from "../src/workspace/sender.js";
+import { sendTracked, DuplicatePending, advance, newTransactionFromReceipt, checkPossiblySent, releaseIfNeverForwarded, attachEvmHash } from "../src/workspace/sender.js";
 import { createJournal, PHASE_ABANDONED, PHASE_DONE, PHASE_NOT_SENT, PHASE_PROMPTING, PHASE_SENT, PHASE_TRACKING } from "../src/workspace/journal.js";
 import { memoryStorage, safeStorage, StorageUnavailable } from "../src/workspace/storage.js";
 
@@ -33,7 +33,7 @@ function receiptFor(evmHash, { txId, recipient, status = "0x1" }) {
 
 function harness({ sendErrors = [], estimate = "0x7a120", chain = CHAIN_HEX, accounts = [ACCOUNT] } = {}) {
   const h = { sent: [], rpc: [], receipts: new Map(), txIds: new Map(), sendErrors: [...sendErrors], wallet: { chain, accounts },
-              evmTxs: new Map(), chainLogs: [], nonce: 7n, storage: memoryStorage() };
+              evmTxs: new Map(), chainLogs: [], nonce: 7n, block: 32n, storage: memoryStorage() };
   h.provider = {
     async request({ method, params }) {
       if (method === "eth_chainId") return h.wallet.chain;
@@ -51,7 +51,9 @@ function harness({ sendErrors = [], estimate = "0x7a120", chain = CHAIN_HEX, acc
         const recipient = h.recipientFor?.(params[0]) ?? PROJECT;
         h.receipts.set(evmHash, receiptFor(evmHash, { txId, recipient }));
         h.txIds.set(evmHash, txId);
-        h.evmTxs.set(evmHash, { hash: evmHash, from: params[0].from, to: params[0].to, input: params[0].data, value: params[0].value ?? "0x0" });
+        // The wallet assigns its own nonce (it may ignore the SDK's hint).
+        h.evmTxs.set(evmHash, { hash: evmHash, from: params[0].from, to: params[0].to, input: params[0].data, value: params[0].value ?? "0x0",
+                                nonce: toHex(h.nonce), blockNumber: toHex(h.block) });
         h.chainLogs.push({ transactionHash: evmHash, args: { txId, recipient, activator: ACCOUNT } });
         h.nonce += 1n;
         // ...and then the page never hears back (extension crash, disconnect).
@@ -95,7 +97,7 @@ function harness({ sendErrors = [], estimate = "0x7a120", chain = CHAIN_HEX, acc
   h.journal = createJournal(safeStorage(h.storage));
   h.readClient = {
     getTransactionCount: vi.fn(async () => { if (h.nonceError) throw new Error("nonce unavailable"); return h.nonce; }),
-    getBlockNumber: vi.fn(async () => 32n),
+    getBlockNumber: vi.fn(async () => h.block),
     getLogs: vi.fn(async ({ args }) => {
       if (h.logsError) throw new Error("eth_getLogs refused");
       return h.chainLogs.filter((l) => l.args.activator.toLowerCase() === args.activator.toLowerCase()
@@ -280,11 +282,11 @@ function reload(h) {
        sleep: async () => {}, polls: 3, intervalMs: 1 });
 }
 
-const LATER = () => Date.now() + 11 * 60 * 1000;      // past the release waiting period
-const deps = (h, now = LATER) => ({ readClient: h.readClient, consensus: CONSENSUS, journal: h.journal, now });
+const deps = (h) => ({ readClient: h.readClient, consensus: CONSENSUS, journal: h.journal });
+const JOURNAL_KEY = "escrow-workspace:v2:journal";
 
 describe("a forwarded transaction whose answer is lost is never sent twice", () => {
-  it("forward → broadcast → response lost → reload → retry refused → found on chain and tracked", async () => {
+  it("forward → broadcast → response lost → reload → retry refused → its own transaction found and tracked", async () => {
     const h = harness();
     h.loseResponse = "Provider disconnected";
     const err = await h.send().catch((e) => e);
@@ -293,81 +295,154 @@ describe("a forwarded transaction whose answer is lost is never sent twice", () 
     let [e] = h.journal.list({});
     expect(e.phase).toBe(PHASE_PROMPTING);
     expect(e.possiblySent).toBe(true);
-    expect(e.evmHash).toBeNull();
+    expect(e.forwardedAt).toBeTruthy();
+    expect(e.forwarded.data).toBe(h.sent[0].data);       // identity recorded at the wallet boundary
 
-    reload(h);                                         // the page reloads
+    reload(h);
+    expect(releaseIfNeverForwarded(e, deps(h)).released).toBe(false);
     await expect(h.send()).rejects.toBeInstanceOf(DuplicatePending);
-    expect(h.sent).toHaveLength(1);                    // nothing new reached the wallet
+    expect(h.sent).toHaveLength(1);
 
     [e] = h.journal.list({});
     const { entry, check } = await checkPossiblySent(e, deps(h));
     expect(check.found).toHaveLength(1);
-    expect(check.releasable).toBe(false);
     expect(entry.evmHash).toBe([...h.evmTxs.keys()][0]);
     expect(entry.phase).toBe(PHASE_DONE);
     expect(entry.verdict.key).toBe("success");
-    // and it cannot be released as "not sent" afterwards
-    expect((await releaseIfNotSent(h.journal.get(entry.id), deps(h))).released).toBe(false);
   });
 
-  it("forwarded but never broadcast: released only after the chain shows the nonce did not move", async () => {
-    const h = harness({ sendErrors: ["Extension context invalidated"] }); // fails before broadcasting
-    await expect(h.send()).rejects.toThrow(/may have been sent/);
-    reload(h);
-    let [e] = h.journal.list({});
-    // Right after the lost answer the wallet may still broadcast: not yet releasable.
-    const early = await releaseIfNotSent(e, deps(h, () => Date.now()));
-    expect(early.released).toBe(false);
-    expect(early.check.reason).toMatch(/can still broadcast/);
-    [e] = h.journal.list({});
-    const { check } = await checkPossiblySent(e, deps(h));
-    expect(check.found).toEqual([]);
-    expect(check.nonce.advanced).toBe(false);
-    expect(check.releasable).toBe(true);
-    [e] = h.journal.list({});
-    const released = await releaseIfNotSent(e, deps(h));
-    expect(released.released).toBe(true);
-    expect(released.entry.phase).toBe(PHASE_ABANDONED);
-    expect(released.entry.expect).toBeUndefined();
-    await expect(h.send()).resolves.toMatchObject({ phase: PHASE_DONE });
-    expect(h.sent).toHaveLength(2);
+  it("Codex #1: a wallet request still pending after reload and 11 minutes is never released; approving it yields exactly one transaction", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const h = harness();
+      let approve;
+      h.walletGate = new Promise((resolve) => { approve = resolve; });
+      const oldPage = h.send().catch((e) => e);          // the wallet prompt stays open
+      await vi.waitFor(() => expect(h.sent).toHaveLength(1));
+
+      reload(h);                                          // the page reloads; the request is still pending in the wallet
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000);      // eleven minutes pass; nonces are unchanged
+      let [e] = h.journal.list({});
+      expect(e.phase).toBe(PHASE_PROMPTING);
+      expect(releaseIfNeverForwarded(e, deps(h)).released).toBe(false);
+      const { check } = await checkPossiblySent(e, deps(h));
+      expect(check.found).toEqual([]);
+      expect(check.reason).toMatch(/stays open/);
+      expect(h.journal.get(e.id).phase).toBe(PHASE_PROMPTING);
+      await expect(h.send()).rejects.toBeInstanceOf(DuplicatePending);   // no second request is opened
+      expect(h.sent).toHaveLength(1);
+
+      h.loseResponse = "page gone";                        // the old page never hears the approval
+      h.walletGate = null;
+      approve();
+      await oldPage;
+      expect(h.evmTxs.size).toBe(1);                       // exactly one broadcast
+
+      [e] = h.journal.list({});
+      const found = await checkPossiblySent(e, deps(h));
+      expect(found.entry.phase).toBe(PHASE_DONE);
+      expect(h.evmTxs.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("an advanced nonce without a matching transaction keeps the action open", async () => {
-    const h = harness({ sendErrors: ["timeout"] });
-    await expect(h.send()).rejects.toThrow(/may have been sent/);
-    h.nonce += 1n;                                     // something else was sent from this account
-    const [e] = h.journal.list({});
-    const r = await releaseIfNotSent(e, deps(h));
-    expect(r.released).toBe(false);
-    expect(r.check.reason).toMatch(/has sent a transaction since the prompt/);
-    expect(h.journal.get(e.id).phase).toBe(PHASE_PROMPTING);
+  it("Codex #2: an older identical transaction is never attached, by hash or by discovery", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const h = harness();
+      const first = await h.send();                        // completed call A
+      expect(first.phase).toBe(PHASE_DONE);
+      const hashA = first.evmHash;
+
+      vi.setSystemTime(Date.now() + 5000);
+      h.block += 3n;
+      h.loseResponse = "disconnected";                     // identical call B, answer lost
+      await expect(h.send()).rejects.toThrow(/may have been sent/);
+      const b = h.journal.list({}).find((x) => x.phase === PHASE_PROMPTING);
+
+      const pasted = await attachEvmHash(b, hashA, deps(h)).catch((err) => err);
+      expect(pasted.message).toMatch(/not this action/);
+      expect(pasted.message).toMatch(/below this action's baseline/);
+      expect(pasted.message).toMatch(/already belongs to another recorded action/);
+      expect(pasted.message).toMatch(/not the exact transaction/);
+      expect(h.journal.get(b.id).phase).toBe(PHASE_PROMPTING);
+      await expect(h.send()).rejects.toBeInstanceOf(DuplicatePending);   // no third send
+      expect(h.sent).toHaveLength(2);
+
+      // Discovery sees both NewTransaction logs and picks only B's own.
+      const { entry, check } = await checkPossiblySent(h.journal.get(b.id), deps(h));
+      expect(check.rejected.map((r) => r.hash)).toContain(hashA);
+      expect(check.found).toHaveLength(1);
+      expect(check.found[0]).not.toBe(hashA);
+      expect(entry.phase).toBe(PHASE_DONE);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("an unreadable nonce keeps the action open, even if log search is also unavailable", async () => {
-    const h = harness({ sendErrors: ["timeout"] });
-    await expect(h.send()).rejects.toThrow(/may have been sent/);
-    h.nonceError = true;
-    h.logsError = true;
-    const [e] = h.journal.list({});
-    const r = await releaseIfNotSent(e, deps(h));
-    expect(r.released).toBe(false);
-    expect(r.check.search.ok).toBe(false);
-    expect(h.journal.get(e.id).phase).toBe(PHASE_PROMPTING);
-  });
-
-  it("an EVM hash pasted by the user is attached only if it is exactly this call", async () => {
+  it("Codex #2, A sent from another browser: nonce and block bounds still refuse it", async () => {
     const h = harness();
-    await h.send({ args: [1] });                       // a different, completed call
-    const other = [...h.evmTxs.keys()][0];
+    const first = await h.send();
+    h.storage.removeItem(JOURNAL_KEY);                    // this browser has no record of A
+    reload(h);
+    h.block += 1n;
     h.loseResponse = "disconnected";
     await expect(h.send()).rejects.toThrow(/may have been sent/);
-    const open = h.journal.list({}).find((x) => x.phase === PHASE_PROMPTING);
-    await expect(attachEvmHash(open, other, deps(h))).rejects.toThrow(/not this action/);
-    const mine = [...h.evmTxs.keys()][1];
-    const attached = await attachEvmHash(open, mine, deps(h));
-    expect(attached.evmHash).toBe(mine);
-    expect(attached.phase).toBe(PHASE_DONE);
+    const [b] = h.journal.list({});
+    const err = await attachEvmHash(b, first.evmHash, deps(h)).catch((e) => e);
+    expect(err.message).toMatch(/below this action's baseline/);
+    expect(err.message).toMatch(/before this action's prompt/);
+    expect(h.journal.get(b.id).phase).toBe(PHASE_PROMPTING);
+  });
+
+  it("a candidate with identical calldata but a different exact input is refused", async () => {
+    const h = harness();
+    h.loseResponse = "disconnected";
+    await expect(h.send()).rejects.toThrow(/may have been sent/);
+    const [b] = h.journal.list({});
+    // Same call, same sender, within bounds, but a different validUntil: another build of the call.
+    const own = [...h.evmTxs.values()][0];
+    const other = { ...own, hash: "0x" + "ee".repeat(32), input: own.input.slice(0, -2) + (own.input.endsWith("0") ? "1" : "0") };
+    h.evmTxs.set(other.hash, other);
+    const err = await attachEvmHash(b, other.hash, deps(h)).catch((e) => e);
+    expect(err.message).toMatch(/not the exact transaction/);
+  });
+
+  it("an intent that never reached the wallet is released on reload, and only that", async () => {
+    const h = harness();
+    // The page stopped after recording the intent, before the guard forwarded it.
+    const e = h.journal.create({ network: "testnetBradbury", project: PROJECT, account: ACCOUNT, functionName: "resolve", args: [0], value: "0",
+      kind: "call", label: "Run review", nonceBefore: "7", promptBlock: "32" });
+    reload(h);
+    const r = releaseIfNeverForwarded(h.journal.get(e.id), deps(h));
+    expect(r.released).toBe(true);
+    expect(r.entry.phase).toBe(PHASE_NOT_SENT);
+    await expect(h.send()).resolves.toMatchObject({ phase: PHASE_DONE });
+    expect(h.sent).toHaveLength(1);
+  });
+
+  it("if the forwarded record cannot be written, nothing reaches the wallet", async () => {
+    const h = harness();
+    const inner = h.storage;
+    let failWrites = false;
+    const flaky = { getItem: (k) => inner.getItem(k), setItem: (k, v) => { if (failWrites) throw new Error("disk full"); inner.setItem(k, v); }, removeItem: (k) => inner.removeItem(k) };
+    h.journal = createJournal(safeStorage(flaky));
+    h.readClient.getBlockNumber = vi.fn(async () => { return h.block; });
+    const origEstimate = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url, init) => {
+      if (JSON.parse(init.body).method === "eth_estimateGas") failWrites = true;   // after the intent, before forwarding
+      return origEstimate(url, init);
+    });
+    const err = await sendTracked({ kind: "call", network: "testnetBradbury", chainId: 4221, account: ACCOUNT, project: PROJECT,
+      functionName: "resolve", args: [0], value: 0n }, { client: h.client, guard: h.guard, journal: h.journal,
+      readClient: h.readClient, consensus: CONSENSUS, sleep: async () => {} }).catch((e) => e);
+    expect(err.name).toBe("GuardRefusal");
+    expect(err.message).toMatch(/could not be recorded/);
+    expect(h.sent).toHaveLength(0);
+    // what is stored has no forwarded record, so a later page releases it safely
+    const stored = JSON.parse(inner.getItem(JOURNAL_KEY));
+    expect(stored[0].forwardedAt).toBeUndefined();
   });
 
   it("an explicit rejection after forwarding is not sent and may be retried", async () => {

@@ -144,25 +144,20 @@ describe("views say what each source does and does not prove", () => {
     expect(html).toContain("disabled>Create project");
   });
 
-  it("a possibly-sent entry offers a chain search and hash attach, and 'not sent' only after a releasable chain check", () => {
-    const base = { id: "p1", label: "Fund", account: CLIENT, createdAt: 0, phase: "prompting", possiblySent: true };
+  it("a possibly-sent entry offers a chain search and a verified hash attach, and never a 'not sent' release", () => {
+    const base = { id: "p1", label: "Fund", account: CLIENT, createdAt: 0, phase: "prompting", possiblySent: true, forwardedAt: 1 };
     const before = activityPanel({ entries: [base], explorer: "https://e/" });
 
     expect(before).toContain("Possibly sent");
     expect(before).toContain("Look for it on chain");
     expect(before).toContain("data-attach-form");
-    expect(before).not.toContain("data-release");
-    expect(before).not.toMatch(/resend|send again/i);
+    expect(before).toContain("may still be pending");
+    expect(before).not.toMatch(/resend|send again|data-release|not sent \(/i);
 
-    const advanced = activityPanel({ entries: [{ ...base, lastCheck: { releasable: false, reason: "This account has sent a transaction since the prompt" } }], explorer: "https://e/" });
+    const checked = activityPanel({ entries: [{ ...base, lastCheck: { reason: "Not found on chain in blocks 1–9. It stays open" } }], explorer: "https://e/" });
 
-    expect(advanced).not.toContain("data-release");
-    expect(advanced).toContain("has sent a transaction since the prompt");
-
-    const clear = activityPanel({ entries: [{ ...base, lastCheck: { releasable: true, reason: "nonce has not advanced", search: { ok: true, from: "1", to: "9" } } }], explorer: "https://e/" });
-
-    expect(clear).toContain("data-release");
-    expect(clear).toContain("blocks 1–9");
+    expect(checked).toContain("blocks 1–9");
+    expect(checked).not.toContain("data-release");
   });
 
   it("an emitted refund never offers confirmation while the balance is unknown or the transfer is in flight", () => {

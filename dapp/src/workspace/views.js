@@ -337,12 +337,12 @@ export function finalityPanel({ project, rows, scan, busy, explorer, defaultFrom
 /* ------------------------------ activity ------------------------------ */
 
 const PHASE_TEXT = {
-  prompting: "Open — the page stopped before the wallet answered; it may have been sent",
+  prompting: "Open — handed to the wallet, but no answer reached this page; it may have been sent",
   sent: "Sent; waiting for the EVM receipt",
   tracking: "Waiting for finality",
   done: "Result",
   "not-sent": "Not sent",
-  abandoned: "Not sent (shown by the chain: nonce unchanged)",
+  abandoned: "Closed",
 };
 
 export function activityPanel({ entries, explorer, busyIds = new Set() }) {
@@ -370,12 +370,8 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
       if (e.phase === "prompting") {
         actions.push(`<button class="btn btn-ghost btn-small" type="button" data-check-sent="${escape(e.id)}" ${busy ? "disabled" : ""}>${busy ? "Checking…" : "Look for it on chain"}</button>`);
 
-        if (e.lastCheck?.releasable && !busy) {
-          actions.push(`<button class="btn btn-ghost btn-small" type="button" data-release="${escape(e.id)}">Confirm not sent (re-checks the chain)</button>`);
-        }
-
         extra = `
-          ${e.lastCheck ? `<div class="meta">Last check: ${escape(e.lastCheck.reason)}${e.lastCheck.search?.ok ? ` Logs searched: blocks ${escape(e.lastCheck.search.from)}–${escape(e.lastCheck.search.to)}.` : e.lastCheck.search ? ` Log search unavailable: ${escape(e.lastCheck.search.reason)}.` : ""}</div>` : '<div class="meta">This action cannot be sent again until it is found on chain or the chain shows nothing was sent from this account.</div>'}
+          ${e.lastCheck ? `<div class="meta">Last check: ${escape(e.lastCheck.reason)}</div>` : '<div class="meta">This action stays open, and cannot be sent again, until its own transaction is found on chain. The wallet request may still be pending: approve or reject it there. Other actions are not affected.</div>'}
           <form class="ws-inline" data-attach-form="${escape(e.id)}">
             <label>Or paste the EVM hash from your wallet's activity <input name="hash" autocomplete="off" spellcheck="false" placeholder="0x… (64 hex)" /></label>
             <button class="btn btn-ghost btn-small" type="submit">Check and attach</button>

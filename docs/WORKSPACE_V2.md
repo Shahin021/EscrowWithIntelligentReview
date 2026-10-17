@@ -159,23 +159,39 @@ After a refresh or a timeout:
 
 **A missing hash is not proof that nothing was sent.** Once the guard has
 handed the transaction to the wallet, only an explicit rejection (EIP-1193
-`4001`) counts as "not sent". Any other failure (a disconnect, an extension
-crash, a timeout, a malformed answer, or a reload while the wallet was open)
-leaves the intent **possibly sent**. It stays open and blocks a resend. It is
-resolved only from the chain:
+`4001`) delivered to this page counts as "not sent". Any other failure leaves
+the intent **possibly sent**: a disconnect, an extension crash, a timeout, a
+malformed answer, or a reload while the wallet was open. A wallet request can
+stay pending and be approved at any later time. Elapsed time and an unchanged
+nonce therefore prove nothing, and the page never uses them to release an
+intent.
 
-1. **Found:** consensus `NewTransaction` logs by this account (and this
-   project) since the baseline block are searched. Each candidate's EVM
-   transaction is fetched and decoded, and attached only if it carries
-   exactly the recorded call from this account. Tracking then continues.
-   This also runs automatically on page load.
-2. **Pasted:** the user can paste the EVM hash from the wallet's activity.
-   It is attached only if it decodes to exactly this call.
-3. **Not sent:** offered only if a fresh check finds no matching transaction,
-   the account's pending and latest nonce both still equal the baseline, and
-   at least ten minutes have passed since the prompt, because a wallet can
-   still broadcast after a lost answer. If the nonce has advanced, or cannot
-   be read, the action stays open.
+**Identity recorded at the wallet boundary.** Just before forwarding, the
+guard durably writes the exact transaction it hands over: the full EVM input,
+which includes the SDK's `validUntil`, plus sender, target and value. The
+pending nonce and block taken before the prompt are already stored with the
+intent. If this write fails, nothing is forwarded. This gives two cases after
+any stop:
+
+- **No forwarded record:** the intent provably never reached the wallet. It
+  is released on the next page load.
+- **A forwarded record:** the intent stays open and blocks a resend. It is
+  resolved only when its *own* transaction is found, and a candidate must
+  pass every check:
+  - same sender, consensus target and value;
+  - the exact recorded input (calldata equality alone is not enough);
+  - a nonce at or above the baseline;
+  - mined at or after the prompt block, or still pending;
+  - a hash no other journal entry owns.
+
+  The same check applies to automatic discovery (consensus `NewTransaction`
+  logs by this account and project since the prompt block, run on page load
+  and on demand) and to a hash the user pastes from the wallet. If more than
+  one candidate matches, none is attached automatically.
+
+There is no "mark as not sent" for a forwarded intent. The wallet request
+should be approved or rejected in the wallet. Once it is on chain, it is
+attached; until then only that one action is blocked.
 
 Restoring a session uses only `eth_accounts` and `eth_chainId`. It opens no
 prompt, asks for no signature and sends no transaction. After an explicit
@@ -183,18 +199,26 @@ Disconnect, nothing is restored until you press Connect.
 
 ## Tests (offline)
 
-- `cd dapp && npm test`: 12 files, 199 tests.
+- `cd dapp && npm test`: 12 files, 201 tests.
   - The baseline had 8 files and 100 tests.
   - Regression tests for the review findings, with the real SDK:
     - forward → wallet broadcasts → answer lost → reload → retry refused
-      (one transaction only) → found in logs, attached and tracked to
-      success, and never releasable afterwards;
-    - forwarded but never broadcast: not releasable before the waiting
-      period, then released, then sendable again;
-    - nonce advanced without a match, or nonce and logs unreadable: the
-      action stays open;
-    - a pasted hash for a different call is refused, while the correct one
-      is attached;
+      (one transaction only) → its own transaction found and tracked;
+    - Codex #1: a wallet request still pending after a reload and 11
+      minutes, with nonces unchanged, is not released. A second request is
+      refused. Approving the original yields exactly one broadcast, which is
+      then found and attached;
+    - Codex #2: after a completed identical call A, a lost-answer call B
+      refuses A's hash. The refusal gives four reasons: exact input,
+      baseline nonce, already owned, and earlier block. B stays open, a
+      third send is refused, and discovery attaches only B's own
+      transaction. With A unknown to this browser, the nonce and block
+      bounds still refuse it;
+    - a candidate with the same calldata but a different exact input is
+      refused;
+    - an intent recorded but never forwarded is released on reload and can
+      then be sent;
+    - if the forwarded record cannot be written, nothing reaches the wallet;
     - an explicit rejection after forwarding counts as not sent;
     - an unreadable nonce baseline means nothing is sent;
     - storage unavailable, full, silently dropping, or corrupt (left
@@ -248,7 +272,10 @@ Never use `0x0a578Ce8…ea8a` or the Registry `0x33c5A0F5…1f99` for writes.
 5. **Journal and reload:** reload the page while a transaction is tracking.
    Check that it resumes and that nothing is re-sent. Also reload while the
    MetaMask prompt is open, then approve it. Check that the entry is found in
-   the logs and attached, not re-sent.
+   the logs and attached, not re-sent, and that no second prompt can be
+   opened for the same action in the meantime. This depends on Bradbury
+   allowing `eth_getLogs` filtered by activator. If it does not, paste the
+   hash from MetaMask's activity.
 6. **Delayed refund transfer:** after recovery, watch the transfer card. It
    should say "has not landed yet" until `eth_getBalance` drops by the refund
    amount, and only then offer confirmation.

@@ -166,6 +166,16 @@ export function createGuardedProvider({ provider, chainId, consensus, log = () =
 
     if (problems.length) throw new GuardRefusal(`Refused at the wallet boundary: ${problems.join("; ")}`);
 
+    // Record, durably and before the wallet sees it, exactly what is being
+    // handed over. If this cannot be recorded, nothing is forwarded: a later
+    // page must be able to tell "never reached the wallet" from "possibly
+    // sent", and to recognise this exact transaction on chain.
+    try {
+      s.onBeforeForward?.(tx);
+    } catch (error) {
+      throw new GuardRefusal(`Not sent: the transaction could not be recorded before opening the wallet (${error.message || error}).`);
+    }
+
     s.forwarded = true;
     log("wallet_prompt", { functionName: s.expect.functionName || "deploy" });
 

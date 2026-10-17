@@ -24,7 +24,7 @@ import { browserStorage, StorageUnavailable } from "./workspace/storage.js";
 import { controllerConfig, projectLink, resolveWorkspace, sameAddress } from "./workspace/project.js";
 import { createJournal } from "./workspace/journal.js";
 import { createGuardedProvider } from "./workspace/guard.js";
-import { advance, attachEvmHash, checkPossiblySent, DuplicatePending, releaseIfNotSent, sendTracked } from "./workspace/sender.js";
+import { advance, attachEvmHash, checkPossiblySent, DuplicatePending, releaseIfNeverForwarded, sendTracked } from "./workspace/sender.js";
 import { connectSession, disconnectSession, isExplicitlyDisconnected, restoreSession } from "./workspace/session.js";
 import { createProjectBook, inspectProject, isRegistered, registryCandidates } from "./workspace/projects.js";
 import { readAttempts, readCriteria, milestoneTimeline } from "./workspace/history.js";
@@ -727,27 +727,6 @@ function renderActivity() {
 function bindActivity(node) {
   node.querySelectorAll("[data-resume]").forEach((b) => b.addEventListener("click", () => resume(b.dataset.resume)));
   node.querySelectorAll("[data-check-sent]").forEach((b) => b.addEventListener("click", () => resume(b.dataset.checkSent)));
-  node.querySelectorAll("[data-release]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const entry = journal.get(b.dataset.release);
-
-      if (!entry) return;
-
-      b.disabled = true;
-
-      try {
-        // Re-checked on chain at the moment of release; never on a stale result.
-        const r = await releaseIfNotSent(entry, { readClient: rc(), consensus, journal });
-
-        showMessage(r.released ? `${entry.label}: confirmed not sent; it can be sent again.` : r.check.reason, r.released ? TX_IDLE : TX_FAILED);
-      } catch (error) {
-        showMessage(explainError(error));
-      }
-
-      renderActivity();
-      renderCreate();
-    }),
-  );
   node.querySelectorAll("[data-attach-form]").forEach((f) =>
     f.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -773,9 +752,21 @@ function bindActivity(node) {
 function resumeOpenEntries() {
   for (const e of journal.list({ network })) {
     if ((e.phase === "sent" || e.phase === "tracking") && (e.evmHash || e.txId)) resume(e.id);
-    // A prompt left open by a reload or a lost wallet answer: look for it on
-    // chain (read-only). It is released only by an explicit, re-checked action.
-    else if (e.phase === "prompting" && e.expect) resume(e.id);
+    // An intent that never reached the wallet (no forwarded record, which is
+    // always written before forwarding) is provably not sent.
+    else if (e.phase === "prompting" && !e.forwardedAt) {
+      try {
+        releaseIfNeverForwarded(e, { journal });
+      } catch {
+        /* stays open; the journal health banner explains why writes are off */
+      }
+
+      renderActivity();
+      renderCreate();
+    }
+    // A forwarded intent whose answer was lost: look for its own transaction
+    // on chain (read-only). It is never released by time or nonce.
+    else if (e.phase === "prompting") resume(e.id);
   }
 }
 
