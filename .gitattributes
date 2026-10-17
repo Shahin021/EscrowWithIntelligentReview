@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Deployed bytes are pinned by SHA-256; never convert line endings.
+dapp/public/contracts/* -text

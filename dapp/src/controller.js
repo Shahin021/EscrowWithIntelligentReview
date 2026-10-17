@@ -27,6 +27,7 @@ export function createController({ config, networkInfo }) {
     project: null,
     milestones: [],
     outflows: [],
+    allOutflows: [],
     now: 0,
     needsReconnect: false,
     txState: TX_IDLE,
@@ -127,7 +128,8 @@ export function createController({ config, networkInfo }) {
 
     /** Load everything the UI and the predicates need. */
     async refresh(readClient, now) {
-      const client = state.client || readClient;
+      // Reads go to the plain RPC client when given; the wallet client only signs.
+      const client = readClient || state.client;
 
       if (!config.ok || !client) return state;
 
@@ -155,6 +157,9 @@ export function createController({ config, networkInfo }) {
       );
 
       state.now = now;
+      // Every transfer, including confirmed ones: history and recovery need
+      // them; state.outflows keeps only the actionable rows.
+      state.allOutflows = outflows;
       state.outflows = outflowActions(outflows, state.account);
       state.project = projectPredicates(project, outflows, state.account);
       state.milestones = milestones.map((m) =>
@@ -221,7 +226,24 @@ export function createController({ config, networkInfo }) {
       return {};
     },
 
-    async dispatch(action, { milestoneIndex = 0, input = {}, outflowId } = {}) {
+    /**
+     * The exact call for an action, after every check dispatch() makes,
+     * without sending it. The workspace UI sends it through the tracked,
+     * guarded path (src/workspace/sender.js).
+     */
+    prepareCall(action, { milestoneIndex = 0, input = {}, outflowId } = {}) {
+      api.assertWritable();
+
+      return {
+        address: config.escrowAddress,
+        ...buildCall(action, {
+          milestoneIndex,
+          input: { ...api.implicitInput(action, { outflowId }), ...input },
+        }),
+      };
+    },
+
+    assertWritable() {
       if (!api.writesEnabled) {
         // Most specific cause first, so the message names the thing the user
         // can actually act on.
@@ -238,6 +260,10 @@ export function createController({ config, networkInfo }) {
             "Writes are disabled: connect a wallet.",
         );
       }
+    },
+
+    async dispatch(action, { milestoneIndex = 0, input = {}, outflowId } = {}) {
+      api.assertWritable();
 
       const call = buildCall(action, {
         milestoneIndex,

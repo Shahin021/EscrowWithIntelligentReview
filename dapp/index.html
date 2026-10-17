@@ -38,22 +38,45 @@
       </div>
     </header>
 
+    <nav class="ws-tabs" role="tablist" aria-label="Workspace">
+      <button type="button" role="tab" data-tab="project" aria-selected="false">Project</button>
+      <button type="button" role="tab" data-tab="projects" aria-selected="false">Your projects</button>
+      <button type="button" role="tab" data-tab="create" aria-selected="false">Create</button>
+    </nav>
+
     <main id="app">
       <section class="panel panel-network" id="network-panel"></section>
       <p id="network-warning" class="notice" hidden></p>
 
-      <section class="overview" id="overview"></section>
-      <section class="panel receipt-panel" id="receipt-panel" hidden></section>
+      <div class="ws-view" data-panel="project">
+        <section class="overview" id="overview"></section>
 
-      <div class="columns">
-        <div class="column column-main">
-          <section id="milestones" class="stack"></section>
-          <section id="outflows" class="stack"></section>
+        <div class="columns">
+          <div class="column column-main">
+            <section id="milestones" class="stack"></section>
+            <section id="outflows" class="stack"></section>
+          </div>
+          <aside class="column column-side">
+            <section id="parties" class="stack"></section>
+            <section id="actions" class="stack"></section>
+            <section class="panel ws-activity-panel" id="activity-panel" hidden></section>
+          </aside>
         </div>
-        <aside class="column column-side">
-          <section id="parties" class="stack"></section>
-          <section id="actions" class="stack"></section>
-        </aside>
+
+        <section class="panel receipt-panel" id="receipt-panel" hidden></section>
+      </div>
+
+      <div class="ws-view" data-panel="projects" hidden>
+        <section class="panel" id="projects-panel"></section>
+      </div>
+
+      <div class="ws-view" data-panel="create" hidden>
+        <div class="columns">
+          <section class="panel ws-create" id="create-panel"></section>
+          <aside class="column column-side">
+            <section class="panel ws-activity-panel" id="create-activity"></section>
+          </aside>
+        </div>
       </div>
     </main>
 
