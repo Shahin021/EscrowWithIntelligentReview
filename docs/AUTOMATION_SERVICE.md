@@ -692,3 +692,40 @@ The reviewer's reproduction no longer reproduces this finding either.
 
 As agreed, the window stays at 72 h to 30 days; nothing shorter than 72 h
 is allowed. This round needs no contract change and no new deployment.
+
+## 10. Round 3: outcome emails report finalized state only
+
+This section supersedes the causal-provenance parts of 8.2 and 9.1.
+
+**Finding.** When history reads lagged, the matcher could cite a previous
+attempt's transaction as the cause of the new attempt's approval, and keep
+citing it.
+
+**What changed.** Outcome emails (review approved, revision required,
+payment completed, and so on) no longer name any transaction. They are
+built only from the contract's `latest-final` state, so the claim they make
+is the finalized state itself. Each one carries the line:
+
+> This result is read from the contract's finalized state. No transaction
+> is named as its cause.
+
+- The transaction scan, the 25-row inspection backlog, the log search and
+  the provenance wait are gone (`automation/src/provenance.js` removed;
+  `SCAN_LOOKBACK_BLOCKS` and `PROVENANCE_WAIT_SECONDS` no longer exist).
+  The 25 limit was not raised; it no longer exists.
+- Job notifications for the service's own step still name the service's
+  own transaction, which the durable queue knows exactly. They are sent
+  only after that transaction is FINALIZED.
+- Non-final (ACCEPTED) state still produces no email; restarts do not
+  repeat an email; each milestone that changes in one poll gets its own
+  email; a subscriber who confirms later still receives the event.
+
+**Regression** (`review-fixes.test.js`, "Codex r3"): attempt 1's submit and
+resolve, 23 unrelated transactions, attempt 2's submission, a log failure
+at the first poll, then the finalized APPROVED state, then later discovery
+of the actual current call. Exactly one email is sent, and neither the old
+nor the actual transaction id appears in it or in the stored event, then or
+later.
+
+The atomic reservation (9.2), the recovery window (9.3), the contracts, the
+site, `main` and the workflows are unchanged. No new deployment is needed.

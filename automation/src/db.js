@@ -79,31 +79,13 @@ CREATE TABLE IF NOT EXISTS events (
   escrow TEXT NOT NULL,
   kind TEXT NOT NULL,
   payload_json TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT 'pending',   -- pending (awaiting verified provenance) | ready
+  state TEXT NOT NULL DEFAULT 'ready',     -- ready to fan out
   batch TEXT,                              -- block of the finalized snapshot that produced it (B1)
   baseline TEXT,                           -- block of the previous finalized snapshot (B0)
-  provenance_json TEXT,
+  provenance_json TEXT,                    -- job events only: the service's own transaction
   note TEXT,
   created_at INTEGER NOT NULL
 );
-
--- GenLayer transactions sent to each watched escrow, with their verdicts.
-CREATE TABLE IF NOT EXISTS escrow_txs (
-  escrow TEXT NOT NULL,
-  tx_id TEXT NOT NULL,
-  evm_block TEXT,
-  source TEXT NOT NULL,                    -- logs | service
-  method TEXT,                             -- decoded GenLayer call
-  args_json TEXT,
-  verdict_json TEXT,
-  final INTEGER NOT NULL DEFAULT 0,
-  ok INTEGER NOT NULL DEFAULT 0,
-  first_final_batch TEXT,                  -- snapshot block at which we first saw it final
-  cited_batch TEXT,                        -- snapshot (event batch) that cited it
-  PRIMARY KEY (escrow, tx_id)
-);
-
-CREATE TABLE IF NOT EXISTS scan_cursor (escrow TEXT PRIMARY KEY, next_block TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY,

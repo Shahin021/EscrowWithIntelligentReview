@@ -59,8 +59,8 @@ describe("notifications come from contract outcomes, once, to confirmed addresse
     const mail = readFileSync(join(config.mailOutboxDir, files.sort().at(-1)), "utf8");
     assert.match(mail, /To: client@example\.com/);
     assert.match(mail, /Milestone 1 · status APPROVED/);
-    assert.match(mail, /Transaction that produced this result/);
-    assert.match(mail, /tx\/0x[0-9a-f]{64}/);
+    assert.match(mail, /finalized state\. No transaction is named as its cause/);
+    assert.doesNotMatch(mail, /tx\/0x/);
     assert.equal(await deliverOutbox(t.db, transport, config), 0, "nothing left to send");
   });
 });

@@ -11,8 +11,6 @@ import { createPublicClient, http } from "viem";
 import { readMilestone, readOutflows, readProject } from "../../dapp/src/escrow.js";
 import { readAttempts } from "../../dapp/src/workspace/history.js";
 import { readFinalityWindow } from "../../dapp/src/workspace/auto-tracker.js";
-import { classifyReceipt } from "../../dapp/src/workspace/finality.js";
-import { decodeTxData } from "./provenance.js";
 
 export function chainConfigFor(network) {
   const chain = chains[network];
@@ -31,7 +29,6 @@ export function createChain({ network, rpcUrl }, injected = {}) {
   // ("latest-final"), never the SDK's default "latest-nonfinal": a step that
   // depends on an earlier one is only planned once that earlier one is final.
   const final = { ...gl, readContract: (args) => gl.readContract({ ...args, transactionHashVariant: "latest-final" }) };
-  const newTx = chainConfig.consensusMainContract.abi.find((e) => e.type === "event" && e.name === "NewTransaction");
 
   return {
     chainConfig,
@@ -65,22 +62,6 @@ export function createChain({ network, rpcUrl }, injected = {}) {
 
     attempts(escrow, milestoneCount) {
       return readAttempts(final, escrow, milestoneCount).then((r) => r.attempts);
-    },
-
-    latestBlock: () => evm.getBlockNumber(),
-
-    /** GenLayer transactions sent to `escrow` in [fromBlock, toBlock] (consensus NewTransaction logs). */
-    async transactionsTo(escrow, fromBlock, toBlock) {
-      const logs = await evm.getLogs({ address: chainConfig.consensusMainContract.address, event: newTx, args: { recipient: escrow }, fromBlock: BigInt(fromBlock), toBlock: BigInt(toBlock) });
-
-      return logs.map((l) => ({ txId: l.args.txId, evmHash: l.transactionHash, block: String(l.blockNumber) }));
-    },
-
-    /** Classify one GenLayer transaction for `escrow` and decode its call. */
-    async inspect(txId, escrow) {
-      const tx = await gl.getTransaction({ hash: txId });
-
-      return { verdict: classifyReceipt(tx, escrow), call: decodeTxData(tx?.txData) };
     },
 
     estimateGas: ({ from, to, data }) => evm.estimateGas({ account: from, to, data, value: 0n }),

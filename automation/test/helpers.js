@@ -10,7 +10,6 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 import { openDb } from "../src/db.js";
 import { innerCallData } from "../src/txbuild.js";
-import { decodeTxData } from "../src/provenance.js";
 
 export const CHAIN = testnetBradbury;
 export const ESCROW = "0x" + "e5".repeat(20);
@@ -40,8 +39,6 @@ export const baseConfig = (over = {}) => ({
   feeWaitSeconds: 60,
   rebroadcastSeconds: 0,
   maxEscrows: 50,
-  provenanceWaitSeconds: 6 * 3600,
-  scanLookbackBlocks: 5000,
   siteUrl: "http://site/",
   publicApiUrl: "http://api",
   allowedOrigins: ["http://site"],
@@ -142,7 +139,7 @@ export function fakeChain({ snap = snapshot(), parties } = {}) {
     async inspect(txId) {
       const { classifyReceipt } = await import("../../dapp/src/workspace/finality.js");
       const tx = c.glTxs.get(txId);
-      return { verdict: classifyReceipt(tx ? { ...tx, recipient: ESCROW } : null, ESCROW), call: decodeTxData(c.txData.get(txId)) };
+      return { verdict: classifyReceipt(tx ? { ...tx, recipient: ESCROW } : null, ESCROW) };
     },
     /** An external wallet sends a GenLayer call to the escrow (call: [method, ...args]; omit for an undecodable tx). */
     external({ status = "FINALIZED", ok = true, block = (c.block += 1), call = null } = {}) {

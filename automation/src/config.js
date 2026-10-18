@@ -38,10 +38,6 @@ export function loadConfig(env = process.env) {
     feeWaitSeconds: int(env.AUTOMATION_FEE_WAIT_SECONDS, 300),
     rebroadcastSeconds: int(env.AUTOMATION_REBROADCAST_SECONDS, 120),
     maxEscrows: int(env.AUTOMATION_MAX_ESCROWS, 200),
-    scanLookbackBlocks: int(env.AUTOMATION_SCAN_LOOKBACK_BLOCKS, 5000),
-    // How long an outcome waits for its causing transaction to be identified
-    // before it is reported as finalized state without naming a transaction.
-    provenanceWaitSeconds: int(env.AUTOMATION_PROVENANCE_WAIT_SECONDS, 6 * 3600),
     mailTransport: env.MAIL_TRANSPORT || "file",
     mailOutboxDir: env.MAIL_OUTBOX_DIR || "./data/outbox",
     mailFrom: env.MAIL_FROM || "Escrow Automation <no-reply@localhost>",

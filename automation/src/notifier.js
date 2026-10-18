@@ -10,7 +10,7 @@
 import { nowSeconds } from "./db.js";
 
 /* Outcome emails are built only from FINALIZED contract state (the service
- * reads "latest-final") and carry the finalized transactions behind them. */
+ * reads "latest-final") and name no transaction as their cause. */
 
 const short = (a) => `${String(a).slice(0, 8)}…${String(a).slice(-6)}`;
 
@@ -140,7 +140,7 @@ export function renderEmail(event, { siteUrl, explorer }) {
   if (event.kind === "step_needs_operator") lines.push("The service stopped this step and will not send another transaction for it. The operator has been alerted.");
 
   if (event.provenance?.length) {
-    lines.push("", "Transaction that produced this result (decoded call matched; FINALIZED with successful execution and consensus agreement):");
+    lines.push("", "The service's own transaction for this step (FINALIZED; see the result above):");
     for (const p of event.provenance) lines.push(`  ${p.method ? `${p.method} · ` : ""}${explorer}tx/${p.txId}${p.label ? ` — ${p.label}` : ""}`);
   } else if (event.note) {
     lines.push("", event.note);
@@ -164,11 +164,10 @@ export function renderEmail(event, { siteUrl, explorer }) {
 export const FAN_OUT_DAYS = 14;
 
 /**
- * Store an event once. Outcome events start "pending": they are only mailed
- * after verified finalized provenance is attached (resolveProvenance in the
- * service). Job events carry their own transaction and start "ready".
+ * Store an event once. Outcome events (from finalized contract state) name
+ * no transaction; job events name the service's own transaction.
  */
-export function createEvent(db, event, { state = "pending", batch = null, baseline = null, provenance = null, note = null } = {}, now = nowSeconds()) {
+export function createEvent(db, event, { state = "ready", batch = null, baseline = null, provenance = null, note = null } = {}, now = nowSeconds()) {
   return (
     db
       .prepare("INSERT OR IGNORE INTO events (key, escrow, kind, payload_json, state, batch, baseline, provenance_json, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")

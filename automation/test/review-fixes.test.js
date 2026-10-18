@@ -174,7 +174,7 @@ describe("Codex r2 #2: one in-flight step per escrow, decided atomically", () =>
   });
 });
 
-describe("2. outcome emails need finalized state and the transaction that caused them", () => {
+describe("2. outcome emails: finalized state only, never a guessed cause", () => {
   async function confirmed(chain, t, clock = { now: NOW }) {
     const db = openDb(t.path);
     const cfg = baseConfig({ sendingEnabled: false, mailTransport: "file", mailOutboxDir: join(t.dir, "outbox"), mailFrom: "t@localhost" });
@@ -186,73 +186,42 @@ describe("2. outcome emails need finalized state and the transaction that caused
     return { db, service };
   }
   const outcomeMails = (h) => h.db.prepare("SELECT * FROM outbox WHERE event_key NOT LIKE 'verify:%'").all();
-  const event = (h, kind) => h.db.prepare("SELECT * FROM events WHERE kind = ?").get(kind);
-  const submit = (chain, m = 0) => chain.external({ call: ["submit_deliverable", m, "https://x.org/e", ""] });
+  const noTxNamed = (mail) => {
+    assert.match(mail.body, /finalized state\. No transaction is named as its cause/);
+    assert.doesNotMatch(mail.body, /tx\/0x/);
+  };
 
-  it("an ACCEPTED approval sends nothing; without its causing transaction the approval stays pending, visibly", async () => {
+  it("an ACCEPTED approval sends nothing (finalized state is unchanged)", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
-    submit(chain);
     const h = await confirmed(chain, t);
     await h.service.tick();
     chain.external({ status: "ACCEPTED", call: ["resolve", 0] });
     await h.service.tick();
     assert.equal(outcomeMails(h).length, 0);
-    chain.snap = approved();
-    await h.service.tick();
-    assert.equal(outcomeMails(h).length, 0);
-    const status = await h.service.publicStatus(ESCROW);
-    assert.equal(status.notifications[0].state, "pending");
-    assert.match(status.notifications[0].note, /no finalized transaction matching this transition/);
   });
 
-  it("Codex r2 #1: an old successful transaction (seen final at the baseline) is never cited", async () => {
+  it("a final failure leaves finalized state unchanged: no approval email", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
-    submit(chain);
-    const old = chain.external({ call: ["resolve", 0] }); // an earlier attempt's review, already final
-    const unrelated = chain.external({}); // undecodable
     const h = await confirmed(chain, t);
     await h.service.tick();
-    chain.external({ status: "ACCEPTED", call: ["resolve", 0] });
-    chain.snap = approved();
-    await h.service.tick();
-    const e = event(h, "review_approved");
-    assert.equal(e.state, "pending");
-    assert.ok(!String(e.provenance_json).includes(old.slice(2)));
-    assert.ok(!String(e.provenance_json).includes(unrelated.slice(2)));
+    chain.external({ status: "FINALIZED", ok: false, call: ["resolve", 0] });
+    for (let i = 0; i < 3; i += 1) await h.service.tick();
     assert.equal(outcomeMails(h).length, 0);
   });
 
-  it("a later or unrelated call cannot be the cause: other milestone, other method, or after the outcome snapshot", async () => {
+  it("finalized APPROVED: exactly one email, stating finalized state and naming no transaction; nothing more after a restart", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
-    submit(chain);
-    const h = await confirmed(chain, t);
-    await h.service.tick();
-    chain.external({ call: ["resolve", 1] });
-    chain.external({ call: ["mark_review_stalled", 0] });
-    chain.snap = approved();
-    await h.service.tick();
-    chain.external({ call: ["resolve", 0] }); // included after the outcome snapshot
-    await h.service.tick();
-    assert.equal(event(h, "review_approved").state, "pending");
-    assert.equal(outcomeMails(h).length, 0);
-  });
-
-  it("only the verified, relevant, final call resolves it; one email that names it; nothing more after a restart", async () => {
-    const t = tempDb();
-    const chain = fakeChain({ snap: review() });
-    submit(chain);
     let h = await confirmed(chain, t);
     await h.service.tick();
-    const cause = chain.external({ call: ["resolve", 0] });
+    chain.external({ call: ["resolve", 0] });
     chain.snap = approved();
     await h.service.tick();
-    let mails = outcomeMails(h);
+    const mails = outcomeMails(h);
     assert.equal(mails.length, 1);
-    assert.match(mails[0].body, new RegExp(`resolve · .*${cause.slice(2)}`));
-
+    noTxNamed(mails[0]);
     h = await confirmed(chain, t);
     await h.service.tick();
     await h.service.tick();
@@ -260,89 +229,83 @@ describe("2. outcome emails need finalized state and the transaction that caused
     assert.equal(readdirSync(join(t.dir, "outbox")).length, 2, "verification + one approval");
   });
 
-  it("several milestones and events in one poll each get their own cause", async () => {
+  it("Codex r3: delayed prior-attempt pair, partial inspection and later discovery never put any transaction in the email", async () => {
+    const t = tempDb();
+    const chain = fakeChain({ snap: snapshot({ milestones: [milestone(0, { status: "UNDER_REVIEW", attemptCount: 2 }), milestone(1)] }) });
+    chain.external({ call: ["submit_deliverable", 0, "https://example.org/old", ""] });
+    const old = chain.external({ call: ["resolve", 0] });
+    for (let i = 0; i < 23; i += 1) chain.external({ call: ["set_automation", "1000", NOW + 86400] });
+    chain.external({ call: ["submit_deliverable", 0, "https://example.org/new", ""] });
+    chain.logsError = "temporary log RPC failure";
+    const h = await confirmed(chain, t);
+    await h.service.tick(); // B0
+    chain.logsError = null;
+    const actual = chain.external({ call: ["resolve", 0] });
+    chain.snap = snapshot({ milestones: [milestone(0, { status: "APPROVED", attemptCount: 2 }), milestone(1)] });
+    await h.service.tick(); // B1
+    await h.service.tick(); // later discovery of the actual call
+    await h.service.tick();
+    const mails = outcomeMails(h);
+    assert.equal(mails.length, 1);
+    noTxNamed(mails[0]);
+    const stored = h.db.prepare("SELECT provenance_json FROM events WHERE kind = 'review_approved'").get().provenance_json;
+    for (const id of [old, actual]) assert.ok(!String(stored).includes(id.slice(2)) && !mails[0].body.includes(id.slice(2)));
+  });
+
+  it("several milestones in one poll: one state-only email each", async () => {
     const t = tempDb();
     const two = (s0, s1) => snapshot({ milestones: [milestone(0, { status: s0, attemptCount: 1 }), milestone(1, { status: s1, attemptCount: 1 })], grants: grantW });
     const chain = fakeChain({ snap: two("UNDER_REVIEW", "UNDER_REVIEW") });
-    submit(chain, 0);
-    submit(chain, 1);
     const h = await confirmed(chain, t);
     await h.service.tick();
-    const c0 = chain.external({ call: ["resolve", 0] });
-    const c1 = chain.external({ call: ["resolve", 1] });
     chain.snap = two("APPROVED", "REVISION_REQUIRED");
     await h.service.tick();
-    const approvedEvent = event(h, "review_approved");
-    const revision = event(h, "revision_required");
-    assert.equal(JSON.parse(approvedEvent.provenance_json)[0].txId, c0);
-    assert.equal(JSON.parse(revision.provenance_json)[0].txId, c1);
-    assert.equal(outcomeMails(h).length, 2);
+    const mails = outcomeMails(h);
+    assert.equal(mails.length, 2);
+    mails.forEach(noTxNamed);
   });
 
-  it("late log discovery: the cause found on a later pass still resolves the event", async () => {
+  it("a payment is reported only from RELEASED with a CONFIRMED payout, naming no transaction", async () => {
     const t = tempDb();
-    const chain = fakeChain({ snap: review() });
-    submit(chain);
-    const h = await confirmed(chain, t);
-    await h.service.tick();
-    const cause = chain.external({ call: ["resolve", 0] });
-    chain.logsError = "eth_getLogs temporarily refused";
-    chain.snap = approved();
-    await h.service.tick();
-    assert.equal(event(h, "review_approved").state, "pending");
-    assert.match(event(h, "review_approved").note, /log search unavailable/);
-    chain.logsError = null;
-    await h.service.tick();
-    assert.equal(JSON.parse(event(h, "review_approved").provenance_json)[0].txId, cause);
-    assert.equal(outcomeMails(h).length, 1);
-  });
-
-  it("a payment is tied to confirm_outflow of exactly that transfer", async () => {
     const paying = (status, outflowStatus) => snapshot({
       milestones: [milestone(0, { status }), milestone(1)],
       outflows: [{ id: 4, kind: "MILESTONE_PAYOUT", status: outflowStatus, amount: "1000", recipient: WORKER.address, milestone: 0 }],
     });
-    for (const withCause of [false, true]) {
-      const t = tempDb();
-      const chain = fakeChain({ snap: paying("PAYMENT_PENDING", "EMITTED") });
-      const h = await confirmed(chain, t);
-      await h.service.tick();
-      chain.external({ call: ["confirm_outflow", 3] }); // another transfer
-      const cause = withCause ? chain.external({ call: ["confirm_outflow", 4] }) : null;
-      chain.snap = paying("RELEASED", "CONFIRMED");
-      await h.service.tick();
-      const e = event(h, "payment_completed");
-      if (withCause) assert.equal(JSON.parse(e.provenance_json)[0].txId, cause);
-      else assert.equal(e.state, "pending");
-    }
-  });
-
-  it("with no provable cause, after the wait it is reported as finalized state naming no transaction", async () => {
-    const t = tempDb();
-    const clock = { now: NOW };
-    const chain = fakeChain({ snap: review() });
-    const h = await confirmed(chain, t, clock);
+    const chain = fakeChain({ snap: paying("PAYMENT_PENDING", "EMITTED") });
+    const h = await confirmed(chain, t);
     await h.service.tick();
-    chain.snap = approved(); // no submission anchor, no decodable cause
-    await h.service.tick();
-    assert.equal(outcomeMails(h).length, 0);
-    clock.now = NOW + 6 * 3600;
+    chain.snap = paying("RELEASED", "CONFIRMED");
     await h.service.tick();
     const [mail] = outcomeMails(h);
-    assert.match(mail.body, /could not be identified, so none is named/);
-    assert.doesNotMatch(mail.body, /tx\/0x/);
+    assert.match(mail.body, /Transfer #4: 1000 wei .*CONFIRMED by the contract/);
+    noTxNamed(mail);
+  });
+
+  it("the service's own finalized step still names its own transaction", async () => {
+    const t = tempDb();
+    const chain = fakeChain({ snap: review() });
+    const db = openDb(t.path);
+    const cfg = baseConfig({ mailTransport: "file", mailOutboxDir: join(t.dir, "outbox"), mailFrom: "t@localhost" });
+    const service = createService({ db, chain, account: OPERATOR, config: cfg, transport: await createTransport(cfg), now: () => NOW });
+    await service.addConsent(await signConsent(WORKER, { role: "worker", scopes: SCOPES.REVIEW, email: "w@example.com" }));
+    db.prepare("UPDATE consents SET email_verified = 1").run();
+    await service.tick();
+    chain.mine();
+    await service.tick();
+    await service.tick();
+    const job = db.prepare("SELECT gl_tx_id FROM jobs").get();
+    const stepMail = db.prepare("SELECT body FROM outbox WHERE event_key LIKE '%step_completed%'").get();
+    assert.match(stepMail.body, new RegExp(`resolve · .*${job.gl_tx_id.slice(2)}`));
   });
 
   it("an event is not lost for a subscriber who confirms the address later", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
-    submit(chain);
     const db = openDb(t.path);
     const cfg = baseConfig({ sendingEnabled: false, mailTransport: "file", mailOutboxDir: join(t.dir, "outbox"), mailFrom: "t@localhost" });
     const service = createService({ db, chain, account: OPERATOR, config: cfg, transport: await createTransport(cfg), now: () => NOW });
     await service.addConsent(await signConsent(CLIENT, { role: "client", scopes: SCOPES.REVIEW, email: "c@example.com" }));
     await service.tick();
-    chain.external({ call: ["resolve", 0] });
     chain.snap = approved();
     await service.tick();
     assert.equal(outcomeMails({ db }).length, 0);

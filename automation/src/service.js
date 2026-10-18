@@ -11,11 +11,13 @@ import { nextExpected, planActions } from "./planner.js";
 import { createExecutor, enqueue, TERMINAL } from "./executor.js";
 import { createEvent, diffEvents, fanOut, jobEvent, verificationEmail } from "./notifier.js";
 import { deliverOutbox } from "./mailer.js";
-import { findCause } from "./provenance.js";
 
 const EXPECTED_INTERFACE = "genlayer.milestone-escrow.v2";
 const lower = (v) => String(v || "").toLowerCase();
 const maskEmail = (e) => String(e).replace(/^(.).*?(.)@/, "$1…$2@");
+export const STATE_ONLY_NOTE =
+  "This result is read from the contract's finalized state. No transaction is named as its cause.";
+
 export const scopesText = (scopes) =>
   Object.entries(SCOPE_NAMES)
     .filter(([bit]) => scopes & Number(bit))
@@ -49,38 +51,8 @@ export function createService({ db, chain, account, config, transport, log = () 
     return planActions(snapshot, activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role })));
   };
 
-  /**
-   * Remember a GenLayer transaction for an escrow (from logs or from our own
-   * job): inclusion block, decoded call, verdict, and the snapshot at which we
-   * first saw it final (the ordering bound for provenance).
-   */
-  const noteTx = (escrow, txId, { block = null, source, verdict = null, call = null, batch = null }) => {
-    const e = escrow.toLowerCase();
-    const id = txId.toLowerCase();
-
-    db.prepare("INSERT OR IGNORE INTO escrow_txs (escrow, tx_id, evm_block, source) VALUES (?, ?, ?, ?)").run(e, id, block, source);
-    if (block !== null) db.prepare("UPDATE escrow_txs SET evm_block = ? WHERE escrow = ? AND tx_id = ? AND evm_block IS NULL").run(block, e, id);
-    if (call) db.prepare("UPDATE escrow_txs SET method = ?, args_json = ? WHERE escrow = ? AND tx_id = ? AND method IS NULL").run(call.method, JSON.stringify(call.args), e, id);
-
-    if (verdict) {
-      db.prepare("UPDATE escrow_txs SET verdict_json = ?, final = ?, ok = ? WHERE escrow = ? AND tx_id = ?").run(JSON.stringify(verdict), verdict.final ? 1 : 0, verdict.ok ? 1 : 0, e, id);
-
-      if (verdict.final && batch !== null) {
-        db.prepare("UPDATE escrow_txs SET first_final_batch = ? WHERE escrow = ? AND tx_id = ? AND first_final_batch IS NULL").run(String(batch), e, id);
-      }
-    }
-  };
-
   const onEvent = (e) => {
     const job = e.job;
-
-    if (job?.gl_tx_id) {
-      const verdict = job.verdict_json ? JSON.parse(job.verdict_json) : null;
-
-      // Recorded with its call; its finality is confirmed (and first seen)
-      // through refreshVerdicts, on the same snapshot clock as every other tx.
-      noteTx(job.escrow, job.gl_tx_id, { block: job.evm_block, source: "service", call: { method: job.function_name, args: JSON.parse(job.args_json) } });
-    }
 
     const event = jobEvent(e);
 
@@ -93,78 +65,6 @@ export function createService({ db, chain, account, config, transport, log = () 
 
     createEvent(db, event, { state: "ready", provenance }, now());
   };
-
-  /** Find GenLayer transactions sent to the escrow (bounded, resumable log scan). */
-  async function scanTransactions(escrow, toBlock) {
-    const cursor = db.prepare("SELECT next_block FROM scan_cursor WHERE escrow = ?").get(escrow.toLowerCase());
-    let from = cursor ? BigInt(cursor.next_block) : BigInt(toBlock) - BigInt(config.scanLookbackBlocks) > 0n ? BigInt(toBlock) - BigInt(config.scanLookbackBlocks) : 0n;
-    const end = BigInt(toBlock);
-
-    for (let i = 0; i < 5 && from <= end; i += 1) {
-      const upper = from + 1999n > end ? end : from + 1999n;
-      const found = await chain.transactionsTo(escrow, from, upper);
-
-      for (const t of found) noteTx(escrow, t.txId, { block: t.block, source: "logs" });
-
-      from = upper + 1n;
-      db.prepare("INSERT INTO scan_cursor (escrow, next_block) VALUES (?, ?) ON CONFLICT(escrow) DO UPDATE SET next_block = excluded.next_block").run(escrow.toLowerCase(), from.toString());
-    }
-  }
-
-  async function refreshVerdicts(escrow, batch) {
-    const open = db.prepare("SELECT tx_id FROM escrow_txs WHERE escrow = ? AND (final = 0 OR method IS NULL) LIMIT 25").all(escrow.toLowerCase());
-
-    for (const row of open) {
-      try {
-        const { verdict, call } = await chain.inspect(row.tx_id, escrow);
-
-        noteTx(escrow, row.tx_id, { source: "logs", verdict, call, batch });
-      } catch {
-        /* retried next pass */
-      }
-    }
-  }
-
-  /**
-   * Attach the transaction that caused each pending outcome (see
-   * src/provenance.js for the rules). An event without a provable cause
-   * waits; after config.provenanceWaitSeconds it is reported as finalized
-   * contract state, explicitly WITHOUT naming any transaction.
-   */
-  function resolveProvenance(escrow, scanNote) {
-    const pending = db.prepare("SELECT * FROM events WHERE lower(escrow) = lower(?) AND state = 'pending' ORDER BY id").all(escrow);
-
-    for (const row of pending) {
-      immediate(db, () => {
-        const txs = db.prepare("SELECT * FROM escrow_txs WHERE escrow = ?").all(escrow.toLowerCase());
-        const event = { kind: row.kind, payload: JSON.parse(row.payload_json), batch: row.batch, baseline: row.baseline };
-        const cause = findCause(event, txs);
-
-        if (cause.txId) {
-          const tx = txs.find((t) => t.tx_id === cause.txId);
-
-          db.prepare("UPDATE escrow_txs SET cited_batch = ? WHERE escrow = ? AND tx_id = ?").run(String(row.batch), escrow.toLowerCase(), cause.txId);
-          db.prepare("UPDATE events SET state = 'ready', provenance_json = ?, note = NULL WHERE id = ? AND state = 'pending'").run(
-            JSON.stringify([{ txId: cause.txId, method: cause.method, label: tx?.verdict_json ? JSON.parse(tx.verdict_json).label : null }]),
-            row.id,
-          );
-
-          return;
-        }
-
-        const waitedTooLong = now() - row.created_at >= config.provenanceWaitSeconds;
-
-        if (waitedTooLong) {
-          db.prepare("UPDATE events SET state = 'ready', provenance_json = '[]', note = ? WHERE id = ? AND state = 'pending'").run(
-            "This result is read from the contract's finalized state. The transaction that produced it could not be identified, so none is named here.",
-            row.id,
-          );
-        } else {
-          db.prepare("UPDATE events SET note = ? WHERE id = ? AND state = 'pending'").run(`${cause.waiting}${scanNote ? ` (${scanNote})` : ""}`, row.id);
-        }
-      });
-    }
-  }
 
   const executor = createExecutor({ db, chain, chainConfig, account, config, planFresh, consentsActive, onEvent, log });
 
@@ -282,23 +182,19 @@ export function createService({ db, chain, account, config, transport, log = () 
 
           if (snapshot.finality !== "final") throw new Error("non-final contract state; nothing is planned or reported from it");
 
-          let scanNote = null;
-
-          try {
-            await scanTransactions(escrow, snapshot.block);
-          } catch (error) {
-            scanNote = `transaction log search unavailable: ${String(error?.shortMessage || error?.message || error).slice(0, 120)}`;
-          }
-
-          await refreshVerdicts(escrow, snapshot.block);
-
           const stored = db.prepare("SELECT json FROM snapshots WHERE lower(escrow) = lower(?)").get(escrow);
           const before = stored ? JSON.parse(stored.json) : null;
           const changed = before && snapshot.milestones.some((m, i) => before.milestones[i]?.status !== m.status);
           const attempts = changed ? await chain.attempts(escrow, snapshot.milestones.length).catch(() => []) : [];
 
-          // Outcomes from finalized state only; mailed after provenance is verified.
-          for (const event of diffEvents(escrow, before, snapshot, attempts)) createEvent(db, event, { state: "pending", batch: snapshot.block, baseline: before?.block ?? null }, now());
+          // Outcomes come only from FINALIZED contract state, and are reported as
+          // that state. No transaction is named as their cause: the service
+          // cannot prove which call produced a transition from an incomplete
+          // view of history (an earlier attempt's call can look identical).
+          // Job notifications still name the service's own transaction.
+          for (const event of diffEvents(escrow, before, snapshot, attempts)) {
+            createEvent(db, event, { state: "ready", batch: snapshot.block, baseline: before?.block ?? null, provenance: [], note: STATE_ONLY_NOTE }, now());
+          }
 
           db.prepare("INSERT INTO snapshots (escrow, json, updated_at) VALUES (?, ?, ?) ON CONFLICT(escrow) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at").run(
             escrow,
@@ -306,7 +202,6 @@ export function createService({ db, chain, account, config, transport, log = () 
             now(),
           );
 
-          resolveProvenance(escrow, scanNote);
 
           const consents = activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role }));
 
