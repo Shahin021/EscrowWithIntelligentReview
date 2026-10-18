@@ -31,6 +31,7 @@ import { readAttempts, readCriteria, milestoneTimeline } from "./workspace/histo
 import { confirmReadiness, readChainTime, readContractBalance, recoveryPlan } from "./workspace/recovery.js";
 import { classifyReceipt, collectProjectTransactions, scanNewTransactionLogs } from "./workspace/finality.js";
 import { estimateDeployGas, OBSERVED_GAS_CAP, projectGas, validateProject, verifyCreatedProject } from "./workspace/create.js";
+import { createAutoTracker, readFinalityWindow, windowLabel } from "./workspace/auto-tracker.js";
 import { ARTIFACT, loadArtifact } from "./workspace/artifact.js";
 import {
   activityPanel,
@@ -88,6 +89,9 @@ let sending = false;
 let chainTime = null; // { seconds, block, readAt }
 let history = null; // { ok, attempts, criteria[], error }
 const resuming = new Set();
+const finalityWindows = new Map();
+let projectRefreshPending = false;
+let projectRefreshing = false;
 
 const el = (id) => document.getElementById(id);
 const setText = (node, value) => {
@@ -663,6 +667,13 @@ async function resume(id, { polls = 1 } = {}) {
       ? (await checkPossiblySent(entry, { readClient: rc(), consensus, journal })).entry
       : await advance(entry, { readClient: rc(), consensus, journal, polls });
 
+    if (next.txId && next.phase !== "done") {
+      try { finalityWindows.set(next.id, await readFinalityWindow(rc(), next.txId)); }
+      catch { finalityWindows.set(next.id, { available: false }); }
+    }
+    if (next.phase === "done" && entry.phase !== "done" && sameAddress(next.project, project)) {
+      projectRefreshPending = true;
+    }
     if (next.kind === "deploy") await afterDeploy(next);
     if (sameAddress(next.project, project) || next.kind === "deploy") showEntry(next);
   } catch (error) {
@@ -708,6 +719,7 @@ function renderActivity() {
   const node = el("activity-panel");
 
   if (!node) return;
+  if (node.contains(document.activeElement) && document.activeElement?.matches("input, textarea")) return;
 
   if (!project) {
     node.hidden = true;
@@ -722,6 +734,9 @@ function renderActivity() {
 
   node.innerHTML = activityPanel({ entries, explorer, busyIds: resuming });
   bindActivity(node);
+  for (const slot of node.querySelectorAll("[data-finality-window]")) {
+    slot.textContent = windowLabel(finalityWindows.get(slot.dataset.finalityWindow));
+  }
 }
 
 function bindActivity(node) {
@@ -1045,6 +1060,7 @@ function renderCreate() {
   const node = el("create-panel");
 
   if (!node || currentTab() !== "create") return;
+  if (node.contains(document.activeElement) && document.activeElement?.matches("input, textarea, select")) return;
 
   const blocker = deployBlocker();
 
@@ -1067,6 +1083,9 @@ function renderCreate() {
 
   activity.innerHTML = activityPanel({ entries, explorer, busyIds: resuming }).replace("for this project", "for project creation");
   bindActivity(activity);
+  for (const slot of activity.querySelectorAll("[data-finality-window]")) {
+    slot.textContent = windowLabel(finalityWindows.get(slot.dataset.finalityWindow));
+  }
 }
 
 function createdHtml() {
@@ -1468,6 +1487,41 @@ async function start() {
   renderTabs();
   resumeOpenEntries();
   checkReceipts();
+  automaticTracking.start();
 }
+
+// Only reads receipts/state. It cannot sign or resend transactions.
+const automaticTracking = createAutoTracker({
+  enabled: () => !document.hidden && navigator.onLine !== false,
+  tick: async () => {
+    if (sending) return;
+    for (const entry of journal.list({ network })) {
+      if ((entry.phase === "sent" || entry.phase === "tracking") && (entry.txId || entry.evmHash)) {
+        await resume(entry.id);
+      } else if (entry.phase === "prompting" && entry.possiblySent &&
+                 Date.now() - (entry.lastCheck?.at || 0) >= 60000) {
+        await resume(entry.id);
+      }
+    }
+    await checkReceipts();
+    // Do not destroy an evidence URL or other form input while typing.
+    const editing = document.activeElement?.matches("input, textarea, select, [contenteditable=true]");
+    if (projectRefreshPending && !sending && !editing && !projectRefreshing) {
+      projectRefreshing = true;
+      projectRefreshPending = false;
+      try { await refresh(); } finally { projectRefreshing = false; }
+    }
+  },
+});
+document.addEventListener("visibilitychange", () => automaticTracking.wake());
+window.addEventListener("online", () => automaticTracking.wake());
+window.addEventListener("pagehide", () => automaticTracking.stop());
+window.addEventListener("pageshow", () => automaticTracking.start());
+setInterval(() => {
+  if (document.hidden) return;
+  for (const slot of document.querySelectorAll("[data-finality-window]")) {
+    slot.textContent = windowLabel(finalityWindows.get(slot.dataset.finalityWindow));
+  }
+}, 1000);
 
 start();

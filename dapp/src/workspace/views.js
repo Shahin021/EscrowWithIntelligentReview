@@ -357,7 +357,7 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
           ? e.verdict?.label || "Done"
           : e.phase === "prompting" && e.possiblySent
             ? "Possibly sent — the wallet had it, but its answer was lost"
-            : PHASE_TEXT[e.phase] || e.phase;
+            : e.lastStatus || PHASE_TEXT[e.phase] || e.phase;
       const ok = e.phase === "done" && e.verdict?.ok;
       const busy = busyIds.has(e.id);
       const actions = [];
@@ -385,6 +385,7 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
             ${e.evmHash ? ` · EVM ${escape(short(e.evmHash))}` : ""}
             ${e.error && e.phase !== "prompting" ? ` · ${escape(e.error)}` : ""}
             ${e.persistError ? ` · <b>not saved in this browser: ${escape(e.persistError)}</b>` : ""}</div>
+          ${e.phase === "tracking" ? `<div class="meta" data-finality-window="${escape(e.id)}">Reading network timing…</div>` : ""}
           ${extra}
           ${actions.length ? `<div class="ws-actions">${actions.join("")}</div>` : ""}
         </li>`;
@@ -392,6 +393,6 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
     .join("");
 
   return `<p class="card-title">Activity from this browser</p>
-    <p class="meta">Recorded durably before each wallet prompt and updated from the chain. An action that is still open here cannot be sent again until it is resolved on chain.</p>
+    <p class="meta">Automatically checked every 15 seconds while this tab is visible and online. Tracking resumes after reload; no transaction is resent. Recorded durably before each wallet prompt and updated from the chain. An action that is still open here cannot be sent again until it is resolved on chain.</p>
     <ul class="ws-list">${rows}</ul>`;
 }
