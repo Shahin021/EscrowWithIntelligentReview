@@ -58,6 +58,9 @@ function validatePayout(outflow, { milestone, project }) {
  * @returns [{ key, functionName, args, scope, amount, reason, consentIds }]
  */
 export function planActions(snapshot, consents) {
+  // Decisions are made only on finalized contract state.
+  if (snapshot.finality !== "final") throw new Error("refusing to plan from non-final contract state");
+
   const { project, milestones, outflows } = deriveState(snapshot);
   const now = snapshot.chainTime;
   const plans = [];
@@ -181,6 +184,34 @@ export function planActions(snapshot, consents) {
         functionName: "confirm_outflow",
         args: [o.id],
         reason: readiness.detail,
+      });
+    }
+  }
+
+  // Close the project once the contract's own closing conditions hold on
+  // finalized state: SETTLING, nothing locked, queued, in flight, bounced or
+  // held as credit or bond, every milestone terminal, no transfer open.
+  const terminal = new Set(["RELEASED", "REFUNDED", "CANCELLED"]);
+  const zero = (v) => big(v) === 0n;
+
+  if (
+    project.status === "SETTLING" &&
+    [project.locked, project.queuedOut, project.inflightOut, project.bouncedHeld, project.appealBondHeld, project.appealCreditHeld, project.depositCreditHeld].every(zero) &&
+    milestones.length > 0 &&
+    milestones.every((m) => terminal.has(m.status)) &&
+    outflows.every((o) => o.status === "CONFIRMED")
+  ) {
+    const consentIds = consents.filter((c) => (c.scopes & (SCOPES.SETTLE | SCOPES.RECOVER)) !== 0).map((c) => c.id);
+
+    if (consentIds.length) {
+      plans.push({
+        key: "close_project",
+        functionName: "close_project",
+        args: [],
+        scope: SCOPES.SETTLE | SCOPES.RECOVER,
+        amount: "0",
+        reason: "Every milestone is settled and nothing is left in flight; closing records the project as finished.",
+        consentIds,
       });
     }
   }

@@ -64,8 +64,8 @@ async function main() {
     return;
   }
 
-  // Emails claimed by a process that stopped mid-delivery go back to pending.
-  db.prepare("UPDATE outbox SET state = 'pending' WHERE state = 'sending'").run();
+  // Rows another process is sending stay leased; an expired lease is retried
+  // by deliverOutbox itself (at-least-once, see src/mailer.js).
 
   const { server } = createApi(service, config, { log });
 

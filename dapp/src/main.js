@@ -1256,7 +1256,7 @@ async function deploy() {
   sending = true;
   renderCreate();
 
-  const definition = { args: preview.args, milestones: preview.milestones, totalRequired: preview.totalRequired };
+  const definition = { args: preview.args, milestones: preview.milestones, totalRequired: preview.totalRequired, recoverySeconds: preview.recoverySeconds ?? null };
 
   try {
     const entry = await sendTracked(

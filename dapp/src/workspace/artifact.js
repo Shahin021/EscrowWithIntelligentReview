@@ -33,10 +33,10 @@ export async function sha256Hex(bytes, subtle = globalThis.crypto?.subtle) {
  */
 export const AUTOMATION_ARTIFACT = {
   path: "contracts/project_escrow_automation.packed.py",
-  sha256: "49c7cc8de8c4f67bf8c58dc7386078f80630c1042d2e24880f8ac0bdf73b86b9",
-  bytes: 19181,
+  sha256: "6b4c31631e561cee51166c01908bc6e19ac3184bbaa14e2a345cc9487586c187",
+  bytes: 19330,
   sourcePath: "contracts/project_escrow_automation.py",
-  sourceSha256: "0906ef4b274a4d6a7b54b28db5c51b8d6ca6e81b1aaeff7d54adae12b8711ed2",
+  sourceSha256: "953ad9f33021d387bffb0772f234fc8e3049533489f2cfbdd0a9abb4dc90c8aa",
   interfaceId: "genlayer.milestone-escrow.v2",
   automationInterface: "genlayer.escrow-automation.v1",
 };

@@ -79,6 +79,18 @@ function spentToday(db, now) {
 export function createExecutor({ db, chain, chainConfig, account, config, planFresh, consentsActive, onEvent = () => {}, log = () => {} }) {
   const sender = account?.address || null;
   const consensusAddress = chainConfig.consensusMainContract.address;
+  // Tracking-only mode (sending off, or no key) disables signing, the first
+  // broadcast and every rebroadcast, in every state. Receipts are still read,
+  // and every stored field and signed byte is kept for when sending resumes.
+  const canSend = () => Boolean(config.sendingEnabled && account);
+
+  /** Another step for the same escrow is not final yet: wait for it. */
+  const predecessorOpen = (job) =>
+    Boolean(
+      db
+        .prepare("SELECT 1 FROM jobs WHERE chain_id = ? AND lower(escrow) = lower(?) AND id != ? AND state IN ('signing','signed','broadcast','tracking') LIMIT 1")
+        .get(job.chain_id, job.escrow, job.id),
+    );
 
   const fail = (job, from, state, error, extra = {}) => {
     if (transition(db, job.id, from, { state, last_error: errText(error), ...extra })) {
@@ -96,7 +108,10 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
       return;
     }
 
-    if (!config.sendingEnabled || !account) return; // tracking-only mode: nothing is signed
+    if (!canSend()) return; // tracking-only mode: nothing is signed
+
+    // Dependent steps wait until every earlier step of this escrow is final.
+    if (predecessorOpen(job)) return;
 
     // The step must still be needed, exactly, on fresh chain state.
     let plans;
@@ -209,7 +224,9 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
   }
 
   async function stepSigning(job) {
-    if (!account || job.sender?.toLowerCase() !== sender.toLowerCase()) {
+    if (!canSend()) return;
+
+    if (job.sender?.toLowerCase() !== sender.toLowerCase()) {
       log("warn", "job reserved for another sender key; leaving it", { job: job.id });
 
       return;
@@ -244,6 +261,7 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
     const receipt = await receiptOf(job);
 
     if (receipt) return onReceipt(job, "signed", receipt);
+    if (!canSend()) return; // keep the bytes; do not broadcast while sending is off
     if (job.next_attempt_at > now) return;
 
     try {
@@ -300,7 +318,7 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
 
     if (receipt) return onReceipt(job, "broadcast", receipt);
 
-    if (now - (job.last_broadcast_at || 0) >= config.rebroadcastSeconds) {
+    if (canSend() && now - (job.last_broadcast_at || 0) >= config.rebroadcastSeconds) {
       try {
         await chain.sendRawTransaction(job.raw_tx); // the same bytes: waiting, not resending
       } catch (error) {

@@ -19,6 +19,8 @@ import { encodeFunctionData, toHex, zeroAddress } from "viem";
 import { isValidAddress } from "../config.js";
 
 export const LIMITS = {
+  minRecoveryHours: 72, // 48 h worker grace + 24 h review window: never shortened
+  maxRecoveryHours: 720,
   maxMilestones: 10,
   maxSpecChars: 4000,
   maxMilestonesJsonChars: 32000,
@@ -209,7 +211,22 @@ export function validateProject(form) {
     registry,
   ];
 
-  return { ok: errors.length === 0, errors, args, milestonesJson, totalRequired: total.toString(), milestones: built };
+  // Automation contract only: an immutable evidence-recovery window. Blank
+  // keeps the v2 default (72 h); it can only be longer, never shorter.
+  let recoverySeconds = null;
+
+  if (form.contractVersion === "automation") {
+    const raw = String(form.recoveryHours ?? "").trim();
+
+    if (raw === "") recoverySeconds = 0;
+    else if (!/^\d+$/.test(raw) || Number(raw) < LIMITS.minRecoveryHours || Number(raw) > LIMITS.maxRecoveryHours) {
+      err("recoveryHours", `The evidence-recovery window must be a whole number of hours from ${LIMITS.minRecoveryHours} to ${LIMITS.maxRecoveryHours}, or blank for the default 72 h.`);
+    } else recoverySeconds = Number(raw) * 3600;
+
+    args.push(recoverySeconds ?? 0);
+  }
+
+  return { ok: errors.length === 0, errors, args, milestonesJson, totalRequired: total.toString(), milestones: built, recoverySeconds };
 }
 
 /** genlayer-js deployContract's txData, byte for byte. */
@@ -285,6 +302,17 @@ export async function verifyCreatedProject(readClient, address, { account, form,
   if (Number(parties.milestone_count) !== form.milestones.length) problems.push(`milestone count ${parties.milestone_count}`);
   if (String(parties.total_required) !== form.totalRequired) problems.push(`total required ${parties.total_required}`);
   if (parties.project_status !== "AWAITING_DEPOSIT") problems.push(`status ${parties.project_status}`);
+
+  if (form.recoverySeconds !== null && form.recoverySeconds !== undefined) {
+    const expected = form.recoverySeconds || 72 * 3600;
+    const [window, grant] = await Promise.all([
+      read("get_evidence_recovery_seconds").catch(() => null),
+      read("get_automation", ["worker"]).catch(() => null),
+    ]);
+
+    if (String(window) !== String(expected)) problems.push(`evidence recovery window ${window}`);
+    if (grant?.interface !== "genlayer.escrow-automation.v1") problems.push("not the automation contract");
+  }
 
   for (let i = 0; i < form.milestones.length; i += 1) {
     const m = form.milestones[i];

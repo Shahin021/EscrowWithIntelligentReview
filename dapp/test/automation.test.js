@@ -107,3 +107,21 @@ describe("automation panel", () => {
     expect((await readGrants(old, ESCROW)).supported).toBe(false);
   });
 });
+
+describe("evidence-recovery window (automation contract only)", () => {
+  const base = { worker: "0x" + "a1".repeat(20), milestones: [{ spec: "Publish the user guide.", amount: "1000" }], allowedSources: "https://github.com/", renderMode: "text", maxRevisions: 3 };
+
+  it("v2 keeps its 7 constructor arguments; the automation contract adds the window (blank = default)", () => {
+    expect(validateProject(base).args).toHaveLength(7);
+    expect(validateProject({ ...base, contractVersion: "automation" }).args.at(-1)).toBe(0);
+    expect(validateProject({ ...base, contractVersion: "automation", recoveryHours: "96" }).args.at(-1)).toBe(96 * 3600);
+  });
+
+  it("can never be shorter than the 72 h worker protection or longer than 30 days", () => {
+    for (const bad of ["71", "721", "1.5", "-3"]) {
+      const r = validateProject({ ...base, contractVersion: "automation", recoveryHours: bad });
+      expect(r.ok, bad).toBe(false);
+      expect(r.errors.map((e) => e.field)).toContain("recoveryHours");
+    }
+  });
+});

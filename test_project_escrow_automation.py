@@ -238,3 +238,67 @@ def test_grants_never_unlock_party_decisions(direct_vm, direct_deploy, direct_ow
     _fails(lambda: escrow.withdraw_deposit_credit("1"), "only the client can withdraw deposit credit")
     _fails(lambda: escrow.appeal(0, ""), "only the worker can appeal")
     _fails(lambda: escrow.propose_settlement("1", "1"), "")
+
+
+# ---------------- configurable evidence-recovery window (automation v1) ----------------
+
+from test_project_escrow_stall_grace import (  # noqa: E402
+    ALLOWED_SOURCES as SG_SOURCES, SPEC as SG_SPEC, URL_A, T0 as SG_T0, T0_EPOCH as SG_T0_EPOCH,
+    HOUR, GRACE, STALL, at as sg_at, set_chain_time as sg_set_time, _mock as sg_mock,
+)
+
+
+def _prepare_window(direct_vm, direct_deploy, client, worker, contract, window):
+    direct_vm.sender = client
+    args = [_addr(worker), json.dumps([{"spec": SG_SPEC, "amount": "1000"}]), SG_SOURCES, "text", 3, False, ""]
+    if window is not None:
+        args.append(window)
+    escrow = direct_deploy(contract, *args)
+    sg_set_time(SG_T0)
+    direct_vm.deal(client, 4000)
+    direct_vm.value = 1000
+    try:
+        escrow.fund()
+    finally:
+        direct_vm.value = 0
+    escrow.activate_funding()
+    direct_vm.sender = worker
+    escrow.submit_deliverable(0, URL_A, "")
+    return escrow
+
+
+def test_default_recovery_window_is_the_v2_protection(direct_vm, direct_deploy, direct_owner, direct_alice, contract):
+    escrow = _prepare_window(direct_vm, direct_deploy, direct_owner, direct_alice, contract, None)
+    assert escrow.get_evidence_recovery_seconds() == str(GRACE + STALL)
+
+
+@pytest.mark.parametrize("window", [4 * 24 * HOUR, 30 * 86400])
+def test_longer_recovery_window_moves_only_the_recovery_deadline(direct_vm, direct_deploy, direct_owner, direct_alice, direct_bob, contract, window):
+    escrow = _prepare_window(direct_vm, direct_deploy, direct_owner, direct_alice, contract, window)
+    assert escrow.get_evidence_recovery_seconds() == str(window)
+
+    started = SG_T0_EPOCH + HOUR
+    sg_set_time(sg_at(started))
+    sg_mock(direct_vm, status=404, body="")
+    escrow.resolve(0)
+    assert escrow.get_milestone_status(0) == "EVIDENCE_UNAVAILABLE"
+    # The worker's 48 h grace is unchanged; only principal recovery is later.
+    assert escrow.get_milestone_unavailable_grace_expiry(0) == str(started + GRACE)
+    assert escrow.get_milestone_evidence_recovery_deadline(0) == str(started + window)
+
+    direct_vm.sender = direct_bob
+    sg_set_time(sg_at(started + GRACE + STALL))
+    _fails(lambda: escrow.recover_unavailable_evidence(0), "window has not passed")
+    sg_set_time(sg_at(started + window))
+    direct_vm.deal(direct_vm._contract_address, 1000)
+    escrow.recover_unavailable_evidence(0)
+    assert escrow.get_milestone_status(0) == "REFUND_PENDING"
+
+
+@pytest.mark.parametrize("window", [GRACE + STALL - 1, HOUR, 30 * 86400 + 1, -5])
+def test_recovery_window_cannot_weaken_worker_protection_or_exceed_30_days(direct_vm, direct_deploy, direct_owner, direct_alice, contract, window):
+    direct_vm.sender = direct_owner
+    _fails(
+        lambda: direct_deploy(contract, _addr(direct_alice), json.dumps([{"spec": SG_SPEC, "amount": "1000"}]), SG_SOURCES, "text", 3, False, "", window),
+        "evidence recovery window must be between 72 hours and 30 days",
+    )

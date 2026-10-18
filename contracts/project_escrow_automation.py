@@ -17,6 +17,11 @@ perform exactly one technical continuation of that party's own request.
                                  made from the client's wallet, total_required
                                  <= max_amount. The operator cannot deposit.
 
+The evidence-recovery window is chosen once at creation
+(evidence_recovery_seconds; 0 = the default 72 h) and may only be longer than
+the default, up to 30 days, so the worker's 48 h grace and 24 h review window
+are never shortened.
+
 A grant is bound to this contract, this chain (it is contract state), the
 granting party, one scope, an amount ceiling and an expiry, and carries a
 version that every set/revoke increments. Automation is off by default. A
@@ -114,6 +119,11 @@ MAX_APPEAL_NOTE_CHARS = 500
 EVIDENCE_UNAVAILABLE_GRACE_SECONDS = 48 * 3600
 # Preserve the 48-hour replacement grace plus one review-stall window. This
 # bound belongs to the unresolved incident, not to an artifact or retry.
+# Automation v1: the recovery window is an immutable creation-time choice.
+# It may only be LONGER than the default (48 h worker grace + 24 h review
+# stall), never shorter, so no worker protection is weakened.
+MAX_EVIDENCE_RECOVERY_SECONDS = 30 * 86400
+
 EVIDENCE_RECOVERY_SECONDS = (
     EVIDENCE_UNAVAILABLE_GRACE_SECONDS + REVIEW_STALL_SECONDS
 )
@@ -1049,6 +1059,8 @@ class ProjectEscrow(gl.Contract):
 
     active_milestone: u32
 
+    evidence_recovery_seconds: u256
+
     # Opt-in continuation grants. Index 0 = client, 1 = worker.
     auto_max: DynArray[u256]
     auto_expires: DynArray[u256]
@@ -1063,7 +1075,15 @@ class ProjectEscrow(gl.Contract):
         max_revisions: int = 3,
         continue_after_refund: bool = False,
         registry: str = "",
+        evidence_recovery_seconds: int = 0,
     ):
+        recovery = evidence_recovery_seconds or EVIDENCE_RECOVERY_SECONDS
+
+        if not EVIDENCE_RECOVERY_SECONDS <= recovery <= MAX_EVIDENCE_RECOVERY_SECONDS:
+            raise gl.vm.UserError("evidence recovery window must be between 72 hours and 30 days")
+
+        self.evidence_recovery_seconds = u256(recovery)
+
         if len(milestones_json) == 0:
             raise gl.vm.UserError("milestones are required")
         if len(milestones_json) > MAX_MILESTONES_JSON_CHARS:
@@ -1514,7 +1534,7 @@ class ProjectEscrow(gl.Contract):
         started = int(self.milestone_evidence_recovery_started_at[index])
         if started == 0:
             return 0
-        return _checked_deadline(started, EVIDENCE_RECOVERY_SECONDS)
+        return _checked_deadline(started, int(self.evidence_recovery_seconds))
 
     def _milestone_criteria(self, index):
         start = int(self.milestone_criteria_start[index])
@@ -3521,6 +3541,10 @@ class ProjectEscrow(gl.Contract):
         self.auto_max[side] = u256(ceiling)
         self.auto_expires[side] = u256(expires_at)
         self.auto_version[side] = u32(int(self.auto_version[side]) + 1)
+
+    @gl.public.view
+    def get_evidence_recovery_seconds(self) -> str:
+        return str(int(self.evidence_recovery_seconds))
 
     @gl.public.view
     def get_automation(self, party: str) -> dict:

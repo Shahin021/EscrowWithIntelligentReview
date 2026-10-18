@@ -151,6 +151,7 @@ export function createPanel(form, { errors = [], preview = null, estimate = null
           <div class="ledger-row"><span class="k">Total to deposit</span><span class="v">${escape(preview.totalRequired)} wei</span></div>
           <div class="ledger-row"><span class="k">Allowed sources</span><span class="v">${escape(preview.args[2])}</span></div>
           <div class="ledger-row"><span class="k">Render · max revisions · continue after refund</span><span class="v">${escape(preview.args[3])} · ${escape(preview.args[4])} · ${escape(preview.args[5])}</span></div>
+          ${preview.recoverySeconds !== null && preview.recoverySeconds !== undefined ? `<div class="ledger-row"><span class="k">Evidence-recovery window</span><span class="v">${escape((preview.recoverySeconds || 259200) / 3600)} h</span></div>` : ""}
           <div class="ledger-row"><span class="k">Registry</span><span class="v">${preview.args[6] ? escape(preview.args[6]) : "none (no outcome reporting)"}</span></div>
           <div class="ledger-row"><span class="k">Contract artifact</span><span class="v">${artifact ? `${escape(artifact.version === "automation" ? "v2 + automation v1" : "v2")} · sha256 ${escape(artifact.sha256.slice(0, 16))}… (${escape(artifact.bytes)} bytes, verified)` : "not loaded"}</span></div>
           <div class="ledger-row"><span class="k">Deployment data</span><span class="v">${escape(preview.gas.txDataBytes)} bytes</span></div>
@@ -193,6 +194,10 @@ export function createPanel(form, { errors = [], preview = null, estimate = null
           <option value="automation" ${form.contractVersion === "automation" ? "selected" : ""}>v2 + automation grants v1 — new; not yet deployed live</option>
         </select>
       </label>
+      ${form.contractVersion === "automation" ? `<label>Evidence-recovery window (hours, ${LIMITS.minRecoveryHours}–${LIMITS.maxRecoveryHours}; blank = 72)
+          <input data-field="recoveryHours" inputmode="numeric" value="${escape(form.recoveryHours ?? "")}" placeholder="72" />
+        </label>${fieldErr("recoveryHours")}
+        <p class="meta">Fixed at creation. It can only lengthen the time before principal can be recovered after unreadable evidence; the worker's 48 h grace and 24 h review window are unchanged.</p>` : ""}
       <p class="meta">${form.contractVersion === "automation" ? "Adds optional grants: the worker can allow anyone to claim an approved payment (to the worker), the client can allow anyone to activate an exact deposit. Off until a party grants it. Everything else is identical to v2." : "Automation of review and deadline recovery works with either version through the optional service; payment claim and funding activation stay manual on v2."}</p>
       <label>Registry for outcome reports (optional)
         <input data-field="registry" value="${escape(form.registry)}" autocomplete="off" spellcheck="false" placeholder="leave empty for none" />

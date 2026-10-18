@@ -9,7 +9,7 @@ import { immediate, nowSeconds } from "./db.js";
 import { ConsentError, SCOPE_NAMES, verifyConsent, verifyRevoke } from "./consent.js";
 import { nextExpected, planActions } from "./planner.js";
 import { createExecutor, enqueue, TERMINAL } from "./executor.js";
-import { diffEvents, jobEvent, recordEvent, verificationEmail } from "./notifier.js";
+import { createEvent, diffEvents, fanOut, jobEvent, verificationEmail } from "./notifier.js";
 import { deliverOutbox } from "./mailer.js";
 
 const EXPECTED_INTERFACE = "genlayer.milestone-escrow.v2";
@@ -21,7 +21,7 @@ export const scopesText = (scopes) =>
     .map(([, name]) => name)
     .join(", ");
 
-export function createService({ db, chain, account, config, transport, log = () => {}, now = nowSeconds }) {
+export function createService({ db, chain, account, config, transport, log = () => {}, now = nowSeconds, processId = `${process.pid}-${randomBytes(4).toString("hex")}` }) {
   const chainConfig = chain.chainConfig;
   const chainId = chainConfig.id;
   const explorer = `${String(chainConfig.blockExplorers?.default?.url || "").replace(/\/$/, "")}/`;
@@ -43,16 +43,119 @@ export function createService({ db, chain, account, config, transport, log = () 
   };
 
   const planFresh = async (escrow) => {
-    const snapshot = await chain.snapshot(escrow);
+    const snapshot = await chain.snapshot(escrow); // finalized state; planActions refuses anything else
 
     return planActions(snapshot, activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role })));
   };
 
+  /** Remember a GenLayer transaction for an escrow (from logs or from our own job). */
+  const noteTx = (escrow, txId, { block = null, source, verdict = null }) => {
+    db.prepare("INSERT OR IGNORE INTO escrow_txs (escrow, tx_id, evm_block, source) VALUES (?, ?, ?, ?)").run(escrow.toLowerCase(), txId.toLowerCase(), block, source);
+
+    if (verdict) {
+      db.prepare("UPDATE escrow_txs SET verdict_json = ?, final = ?, ok = ? WHERE escrow = ? AND tx_id = ?").run(
+        JSON.stringify(verdict),
+        verdict.final ? 1 : 0,
+        verdict.ok ? 1 : 0,
+        escrow.toLowerCase(),
+        txId.toLowerCase(),
+      );
+    }
+  };
+
   const onEvent = (e) => {
+    const job = e.job;
+
+    if (job?.gl_tx_id) {
+      const verdict = job.verdict_json ? JSON.parse(job.verdict_json) : null;
+
+      noteTx(job.escrow, job.gl_tx_id, { block: job.evm_block, source: "service", verdict: verdict?.final ? verdict : null });
+    }
+
     const event = jobEvent(e);
 
-    if (event) recordEvent(db, event, notifyCtx);
+    if (!event) return;
+
+    // A job event cites its own transaction (or none, for budget/cap stops,
+    // which claim no outcome).
+    const verdict = job?.verdict_json ? JSON.parse(job.verdict_json) : null;
+    const provenance = job?.gl_tx_id ? [{ txId: job.gl_tx_id, label: verdict?.label || null }] : [];
+
+    createEvent(db, event, { state: "ready", provenance }, now());
   };
+
+  /** Find GenLayer transactions sent to the escrow (bounded, resumable log scan). */
+  async function scanTransactions(escrow, toBlock) {
+    const cursor = db.prepare("SELECT next_block FROM scan_cursor WHERE escrow = ?").get(escrow.toLowerCase());
+    let from = cursor ? BigInt(cursor.next_block) : BigInt(toBlock) - BigInt(config.scanLookbackBlocks) > 0n ? BigInt(toBlock) - BigInt(config.scanLookbackBlocks) : 0n;
+    const end = BigInt(toBlock);
+
+    for (let i = 0; i < 5 && from <= end; i += 1) {
+      const upper = from + 1999n > end ? end : from + 1999n;
+      const found = await chain.transactionsTo(escrow, from, upper);
+
+      for (const t of found) noteTx(escrow, t.txId, { block: t.block, source: "logs" });
+
+      from = upper + 1n;
+      db.prepare("INSERT INTO scan_cursor (escrow, next_block) VALUES (?, ?) ON CONFLICT(escrow) DO UPDATE SET next_block = excluded.next_block").run(escrow.toLowerCase(), from.toString());
+    }
+  }
+
+  async function refreshVerdicts(escrow) {
+    const open = db.prepare("SELECT tx_id FROM escrow_txs WHERE escrow = ? AND final = 0 LIMIT 25").all(escrow.toLowerCase());
+
+    for (const row of open) {
+      try {
+        const verdict = await chain.verdictOf(row.tx_id, escrow);
+
+        noteTx(escrow, row.tx_id, { source: "logs", verdict });
+      } catch {
+        /* retried next pass */
+      }
+    }
+  }
+
+  /**
+   * Attach verified finalized provenance to pending outcome events, batch by
+   * batch: every successful FINALIZED transaction for the escrow, not yet cited,
+   * included at or before the snapshot that showed the outcome. Without one,
+   * the event stays pending (and visible in the status API); it is never
+   * mailed on contract state alone.
+   */
+  function resolveProvenance(escrow, scanNote) {
+    const batches = db
+      .prepare("SELECT DISTINCT batch FROM events WHERE lower(escrow) = lower(?) AND state = 'pending' ORDER BY CAST(batch AS INTEGER)")
+      .all(escrow)
+      .map((r) => r.batch);
+
+    for (const batch of batches) {
+      immediate(db, () => {
+        const txs = db
+          .prepare("SELECT tx_id, verdict_json FROM escrow_txs WHERE escrow = ? AND final = 1 AND ok = 1 AND cited_by IS NULL AND (evm_block IS NULL OR CAST(evm_block AS INTEGER) <= ?)")
+          .all(escrow.toLowerCase(), Number(batch));
+
+        if (!txs.length) {
+          db.prepare("UPDATE events SET note = ? WHERE lower(escrow) = lower(?) AND batch = ? AND state = 'pending'").run(
+            `waiting for a verified finalized transaction behind this result${scanNote ? ` (${scanNote})` : ""}`,
+            escrow,
+            batch,
+          );
+
+          return;
+        }
+
+        const provenance = txs.map((t) => ({ txId: t.tx_id, label: t.verdict_json ? JSON.parse(t.verdict_json).label : null }));
+
+        for (const t of txs) db.prepare("UPDATE escrow_txs SET cited_by = ? WHERE escrow = ? AND tx_id = ?").run(batch, escrow.toLowerCase(), t.tx_id);
+
+        db.prepare("UPDATE events SET state = 'ready', provenance_json = ?, note = NULL WHERE lower(escrow) = lower(?) AND batch = ? AND state = 'pending'").run(
+          JSON.stringify(provenance),
+          escrow,
+          batch,
+        );
+      });
+    }
+  }
 
   const executor = createExecutor({ db, chain, chainConfig, account, config, planFresh, consentsActive, onEvent, log });
 
@@ -167,18 +270,34 @@ export function createService({ db, chain, account, config, transport, log = () 
           cancelUncovered(escrow);
 
           const snapshot = await chain.snapshot(escrow);
+
+          if (snapshot.finality !== "final") throw new Error("non-final contract state; nothing is planned or reported from it");
+
+          let scanNote = null;
+
+          try {
+            await scanTransactions(escrow, snapshot.block);
+          } catch (error) {
+            scanNote = `transaction log search unavailable: ${String(error?.shortMessage || error?.message || error).slice(0, 120)}`;
+          }
+
+          await refreshVerdicts(escrow);
+
           const stored = db.prepare("SELECT json FROM snapshots WHERE lower(escrow) = lower(?)").get(escrow);
           const before = stored ? JSON.parse(stored.json) : null;
           const changed = before && snapshot.milestones.some((m, i) => before.milestones[i]?.status !== m.status);
           const attempts = changed ? await chain.attempts(escrow, snapshot.milestones.length).catch(() => []) : [];
 
-          for (const event of diffEvents(escrow, before, snapshot, attempts)) recordEvent(db, event, notifyCtx);
+          // Outcomes from finalized state only; mailed after provenance is verified.
+          for (const event of diffEvents(escrow, before, snapshot, attempts)) createEvent(db, event, { state: "pending", batch: snapshot.block }, now());
 
           db.prepare("INSERT INTO snapshots (escrow, json, updated_at) VALUES (?, ?, ?) ON CONFLICT(escrow) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at").run(
             escrow,
             JSON.stringify(snapshot, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
             now(),
           );
+
+          resolveProvenance(escrow, scanNote);
 
           const consents = activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role }));
 
@@ -192,7 +311,9 @@ export function createService({ db, chain, account, config, transport, log = () 
 
       await executor.runOnce(now());
 
-      if (transport) await deliverOutbox(db, transport, config);
+      fanOut(db, notifyCtx, now());
+
+      if (transport) await deliverOutbox(db, transport, config, { owner: processId });
     },
 
     /** Public view: no email, signature, raw transaction or key material. */
@@ -224,9 +345,15 @@ export function createService({ db, chain, account, config, transport, log = () 
         }
       }
 
+      const notifications = db
+        .prepare("SELECT kind, state, note, created_at FROM events WHERE lower(escrow) = lower(?) ORDER BY id DESC LIMIT 50")
+        .all(escrow)
+        .map((e) => ({ kind: e.kind, state: e.state, note: e.note, createdAt: e.created_at }));
+
       return {
         escrow,
         chainId,
+        notifications,
         sendingEnabled: config.sendingEnabled,
         operator: account?.address || null,
         consents,

@@ -52,32 +52,44 @@ export async function createTransport(config) {
   return { name: "none", send: null };
 }
 
-export async function deliverOutbox(db, transport, config, { limit = 20 } = {}) {
+/**
+ * Deliver pending mail. A row is leased to one process while it is sent; a
+ * lease that expires (the process died mid-send) makes the row pending again.
+ * External delivery is therefore at-least-once: if a process stops after the
+ * mail server accepted a message but before recording it, that message can be
+ * sent again. It is never silently dropped.
+ */
+export async function deliverOutbox(db, transport, config, { limit = 20, owner = `p${process.pid}`, leaseSeconds = 300 } = {}) {
   if (!transport.send) return 0;
 
   const now = nowSeconds();
-  const rows = db.prepare("SELECT * FROM outbox WHERE state = 'pending' AND next_attempt_at <= ? ORDER BY id LIMIT ?").all(now, limit);
+  const rows = db
+    .prepare("SELECT * FROM outbox WHERE ((state = 'pending' AND next_attempt_at <= ?) OR (state = 'sending' AND lease_until < ?)) ORDER BY id LIMIT ?")
+    .all(now, now, limit);
   let sent = 0;
 
   for (const row of rows) {
-    // Claim the row first, so a second process does not send it too.
-    const claim = db.prepare("UPDATE outbox SET state = 'sending' WHERE id = ? AND state = 'pending'").run(row.id);
+    // Take the lease first, so another process does not send the same row.
+    const claim = db
+      .prepare("UPDATE outbox SET state = 'sending', lease_owner = ?, lease_until = ? WHERE id = ? AND (state = 'pending' OR (state = 'sending' AND lease_until < ?))")
+      .run(owner, now + leaseSeconds, row.id, now);
 
     if (claim.changes !== 1) continue;
 
     try {
       await transport.send({ id: row.id, from: config.mailFrom, to: row.email, subject: row.subject, body: row.body });
-      db.prepare("UPDATE outbox SET state = 'sent', sent_at = ? WHERE id = ?").run(nowSeconds(), row.id);
+      db.prepare("UPDATE outbox SET state = 'sent', sent_at = ?, lease_owner = NULL, lease_until = NULL WHERE id = ? AND lease_owner = ?").run(nowSeconds(), row.id, owner);
       sent += 1;
     } catch (error) {
       const attempts = row.attempts + 1;
 
-      db.prepare("UPDATE outbox SET state = ?, attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?").run(
+      db.prepare("UPDATE outbox SET state = ?, attempts = ?, next_attempt_at = ?, last_error = ?, lease_owner = NULL, lease_until = NULL WHERE id = ? AND lease_owner = ?").run(
         attempts >= 8 ? "failed" : "pending",
         attempts,
         nowSeconds() + Math.min(3600, 30 * 2 ** attempts),
         String(error?.message || error).slice(0, 200),
         row.id,
+        owner,
       );
     }
   }

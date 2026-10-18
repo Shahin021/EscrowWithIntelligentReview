@@ -123,9 +123,10 @@ was skipped. It proves the result by renaming back and comparing the AST.
 
 Results:
 
-- **Artifact:** 19,181 bytes, sha256 `49c7cc8d…86b9`.
-- **Projected gas, small project:** 16.23 M (1 milestone, 2 criteria),
-  leaving 546 k headroom.
+- **Artifact:** 19,330 bytes, sha256 `6b4c3163…c187` (this includes the
+  configurable recovery window, §8).
+- **Projected gas, small project:** 16.36 M (1 milestone, 2 criteria),
+  leaving about 418 k headroom.
 - **Pre-flight still applies:** the site still requires a successful
   read-only estimate within the cap before the wallet opens.
 - **Projection fix:** `projectGas` previously measured each artifact against
@@ -149,13 +150,13 @@ Results:
   - the v2 source is unchanged.
 - **Equivalence run.** The whole existing suite was run with the **packed
   automation artifact in place of `contracts/project_escrow.py`**:
-  607 passed, 5 failed. All 5 failures are expected artefacts of the swap
+  639 passed, 6 failed. All 6 failures are expected artefacts of the swap
   and none is a behaviour difference:
-  - two tests pin the v2 artifact's hash;
+  - three tests pin the v2 artifact's or the v2 source's hash;
   - three check size heuristics of a source file that is now the packed one.
 
   So every v2 behaviour test passes on the new contract.
-- **Full suite on this branch:** 631 passed.
+- **Full suite on this branch:** 645 passed.
 
 ## 4. The service (`automation/`)
 
@@ -310,7 +311,10 @@ budget paused.
 | `smtp` | real delivery; needs `SMTP_URL` and the optional `nodemailer` package |
 | `none` | messages stay in the outbox |
 
-Delivery is at-least-once.
+Delivery is at-least-once. Each row is leased to the process sending it; only
+an expired lease is retried by another process, so a process that stops after
+the mail server accepted a message may cause it to be sent again. Nothing is
+silently dropped, and exactly-once external delivery is not promised.
 
 ### API
 
@@ -325,7 +329,7 @@ Delivery is at-least-once.
 
 CORS is limited to `AUTOMATION_ALLOWED_ORIGINS`.
 
-**Service tests:** 37, using `node --test` with a simulated chain. They
+**Service tests:** 54, using `node --test` with a simulated chain. They
 cover:
 
 - planner rules;
@@ -364,9 +368,9 @@ Without the variable, the panel says no service is configured. The *Create*
 tab can deploy either the proven v2 artifact (the default) or the automation
 artifact; both are pinned by hash.
 
-**Site tests:** 216 (vitest), including 9 for automation. The build passes.
+**Site tests:** 218 (vitest), including 11 for automation. The build passes.
 
-**Mocked UI check:** 17 desktop and mobile scenarios had no horizontal
+**Mocked UI check:** 18 desktop and mobile scenarios had no horizontal
 overflow. On page load the wallet was asked only for `eth_accounts` and
 `eth_chainId`.
 
@@ -402,10 +406,12 @@ git switch feat/escrow-automation-v3
 cd dapp; npm ci; npm test; cd ..
 cd automation; npm ci; npm test
 # tracking-only (no key, nothing is signed), file email outbox:
-$env:MAIL_TRANSPORT="file"; $env:AUTOMATION_ALLOWED_ORIGINS="http://localhost:5180"
+$env:MAIL_TRANSPORT="file"   # CORS default allows http://127.0.0.1:5180 and http://localhost:5180
 npm start
 # site with the panel (second window):
-cd ..\dapp; $env:VITE_AUTOMATION_URL="http://127.0.0.1:8787"; npm run dev -- --port 5180
+# Open the site at http://127.0.0.1:5180/ - the origin where your existing
+# browser journal lives (localhost:5180 is a different origin with its own storage).
+cd ..\dapp; $env:VITE_AUTOMATION_URL="http://127.0.0.1:8787"; npm run dev -- --host 127.0.0.1 --port 5180
 ```
 
 To let the service send (only for fresh test contracts), store a **new,
@@ -417,3 +423,180 @@ permissions. Then set:
 - your caps.
 
 Fund that address with a small amount of test GEN.
+
+
+## 8. Review fixes (AUTOMATION_V3_REVIEW, 2026-10-18)
+
+### 8.1 Dependent steps wait for a finalized, successful predecessor
+
+**What was wrong.** The service planned from the SDK's default
+`latest-nonfinal` reads. An ACCEPTED `resolve` could therefore be followed by
+a `claim_payment`.
+
+**What changed:**
+
+- **Finalized reads.** Every service read of contract state now uses
+  `transactionHashVariant: "latest-final"`. `chain.snapshot()` marks the
+  result `finality: "final"`, and `planActions` refuses anything else. A
+  test checks every read the snapshot makes.
+- **External transactions.** A step another wallet sent is invisible to the
+  service until it is final, so nothing is built on it.
+- **Per-escrow ordering.** No new step for an escrow is signed while any
+  earlier step of that escrow is `signing`, `signed`, `broadcast` or
+  `tracking`. It waits until that step is `done`. A step that is merely
+  stored is not enough.
+- **What `done` means.** A step is `done` only when FINALIZED with
+  `FINISHED_WITH_RETURN` and `AGREE`/`MAJORITY_AGREE`.
+
+**Accepted-state pipelining was not implemented.** It would need dependency
+and reorg invalidation, and is outside the safe default.
+
+**Regressions** (`automation/test/review-fixes.test.js`):
+
+- our predecessor still ACCEPTED: no dependent send;
+- finalized state already shows APPROVED while our own `resolve` is still
+  tracking: the claim is queued but not signed until `resolve` is final;
+- the predecessor finally fails: no dependent send ever;
+- an external wallet's ACCEPTED predecessor: no dependent send.
+
+### 8.2 Outcome emails need finalized state and verified provenance
+
+**Outcome events** come only from finalized snapshots. They start
+`pending` and are mailed only after **provenance** is attached.
+
+**How provenance is found:**
+
+1. **Recording transactions.** The service records every GenLayer
+   transaction sent to the escrow. It gets them from its own jobs, and from
+   a bounded, resumable scan of consensus `NewTransaction` logs.
+2. **Classifying them.** Each recorded transaction is classified. FINALIZED
+   is not enough: it also needs a successful execution and agreement.
+3. **Citing them.** An event cites the successful finalized transactions
+   included at or before the snapshot that showed the outcome, and not
+   already cited by an earlier event.
+
+**If no such transaction is found** (for example, the RPC refuses
+`eth_getLogs` and the change came from another wallet), the event stays
+pending. The status API shows it with the reason. It is never mailed on
+contract state alone.
+
+**What the email shows.** The email lists the cited transactions with
+explorer links.
+
+**Who receives it, and when:**
+
+- **Every pass:** ready events are fanned out on every pass, so a restart
+  causes no repeat and loses nothing.
+- **Late confirmers:** a subscriber who confirms their address later still
+  receives events from the last 14 days.
+- **No repeats:** a recipient never receives the same event twice.
+
+**Regressions:**
+
+- an ACCEPTED approval sends no email;
+- an approval without a verified finalized transaction stays pending;
+- a final failure sends no approval email;
+- a final success sends exactly one email with its transaction, also after
+  a restart;
+- a later confirmation still receives the event.
+
+### 8.3 Tracking-only mode never signs or broadcasts
+
+**When sending is off or there is no key,** the following are disabled in
+every state:
+
+- signing;
+- the first broadcast;
+- rebroadcast.
+
+Receipts are still read, so already-broadcast steps progress to their
+result. Every stored field and signed byte is kept. Turning sending back on
+resumes with the same bytes only.
+
+**Regression:** a restart in off mode with `signing`, `signed` and
+`broadcast` jobs:
+
+- makes zero signatures and zero broadcasts;
+- lets existing receipts progress;
+- keeps the bytes unchanged;
+- resends the identical bytes once sending is back on.
+
+### 8.4 Closing the project
+
+`close_project` is planned once, under a SETTLE or RECOVER consent, from
+finalized state. It requires the contract's own closing conditions:
+
+- the project is `SETTLING`;
+- locked, queued, in-flight, bounced, appeal bond, appeal credit and deposit
+  credit are all zero;
+- every milestone is `RELEASED`, `REFUNDED` or `CANCELLED`;
+- every transfer is `CONFIRMED`.
+
+**Regressions:**
+
+- the refunded path closes exactly once, also across a restart;
+- the released path closes;
+- each open obligation prevents closing;
+- consent is required.
+
+### 8.5 Configurable evidence-recovery window (automation contract only)
+
+**Constructor.** `evidence_recovery_seconds` is a new last constructor
+argument. `0` means the v2 default of 72 h. It is immutable, readable
+through `get_evidence_recovery_seconds()`, and chosen in *Create* (hours,
+blank = 72). The preview shows it, and the read-back after deployment checks
+it.
+
+**Protection kept.** The window can only be **longer**: from 72 h (the
+worker's 48 h grace plus the 24 h review window) to 30 days. It moves only
+the principal-recovery deadline. The worker's grace expiry is unchanged.
+
+**Tests** (Direct Mode, source and packed):
+
+- the default equals the v2 protection;
+- 96 h and 30 days move only the recovery deadline;
+- recovery is refused before the window ends;
+- 71 h 59 m 59 s, 1 h, 30 days + 1 s and negative values are rejected.
+
+**Artifact.** It was regenerated and pinned (19,330 bytes). The equivalence
+run passes (639 passed; the 6 failures are swap artefacts).
+
+**Before any live deployment,** the site requires a fresh read-only gas
+estimate for the exact constructor arguments.
+
+### 8.6 Integration items
+
+- **CORS.** The default now allows `http://127.0.0.1:5180` as well as
+  `http://localhost:5180`. Open the site on `127.0.0.1:5180`, where the
+  existing browser journal lives. Origins are not migrated.
+- **Outbox recovery.** Startup no longer resets every `sending` row. Rows are
+  leased per process, and only an expired lease is retried. A regression
+  covers this.
+- **SMTP.** `nodemailer` is pinned as an optional dependency at `10.0.14`,
+  a release more than two weeks old. It is tested against a local SMTP
+  server: delivery is recorded as sent, and an unreachable server leaves
+  the row pending for a retry.
+
+  Real delivery needs:
+
+  ```
+  MAIL_TRANSPORT=smtp
+  SMTP_URL=smtps://user:password@smtp.example.com:465
+  MAIL_FROM=…
+  ```
+
+  Keep `SMTP_URL` out of the repository.
+- **Hosting.** A service started in a terminal stops when the machine
+  sleeps, shuts down or logs out. Nothing is lost, because every step
+  resumes from the database. But nothing happens while it is stopped, and
+  emails are delayed.
+
+  For always-on operation, run it on a host that stays up, for example:
+
+  - a small Linux VM with a `systemd` unit (`Restart=always`,
+    `WorkingDirectory=…/automation`, environment file mode 600);
+  - Windows with a service wrapper or Task Scheduler "run whether user is
+    logged on or not".
+
+  Put the database and the key file on that host, and keep only one
+  operator key per database.

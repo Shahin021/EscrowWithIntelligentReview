@@ -21,7 +21,9 @@ export function loadConfig(env = process.env) {
     httpHost: env.AUTOMATION_HOST || "127.0.0.1",
     httpPort: int(env.AUTOMATION_PORT, 8787),
     publicApiUrl: env.AUTOMATION_PUBLIC_URL || "http://127.0.0.1:8787",
-    allowedOrigins: (env.AUTOMATION_ALLOWED_ORIGINS || "http://localhost:5180").split(",").map((s) => s.trim()).filter(Boolean),
+    // Both spellings of the local site: the existing browser journal lives on
+    // 127.0.0.1:5180 and must stay visible (a different origin is a different store).
+    allowedOrigins: (env.AUTOMATION_ALLOWED_ORIGINS || "http://127.0.0.1:5180,http://localhost:5180").split(",").map((s) => s.trim()).filter(Boolean),
     siteUrl: env.AUTOMATION_SITE_URL || "http://localhost:5180/",
     operatorKeyFile: env.OPERATOR_KEY_FILE || "",
     sendingEnabled: env.AUTOMATION_SENDING === "on",
@@ -36,6 +38,7 @@ export function loadConfig(env = process.env) {
     feeWaitSeconds: int(env.AUTOMATION_FEE_WAIT_SECONDS, 300),
     rebroadcastSeconds: int(env.AUTOMATION_REBROADCAST_SECONDS, 120),
     maxEscrows: int(env.AUTOMATION_MAX_ESCROWS, 200),
+    scanLookbackBlocks: int(env.AUTOMATION_SCAN_LOOKBACK_BLOCKS, 5000),
     mailTransport: env.MAIL_TRANSPORT || "file",
     mailOutboxDir: env.MAIL_OUTBOX_DIR || "./data/outbox",
     mailFrom: env.MAIL_FROM || "Escrow Automation <no-reply@localhost>",

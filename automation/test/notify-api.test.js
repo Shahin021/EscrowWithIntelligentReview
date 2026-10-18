@@ -48,6 +48,8 @@ describe("notifications come from contract outcomes, once, to confirmed addresse
     assert.equal(service.verifyEmail(token), true);
     assert.equal(service.verifyEmail(token), false, "single use");
 
+    // Someone runs the review from their own wallet; it finalizes successfully.
+    chain.external({ status: "FINALIZED", ok: true });
     chain.snap = snapshot({ milestones: [milestone(0, { status: "APPROVED", attemptCount: 1 }), milestone(1)] });
     await service.tick();
     await service.tick();
@@ -56,6 +58,8 @@ describe("notifications come from contract outcomes, once, to confirmed addresse
     const mail = readFileSync(join(config.mailOutboxDir, files.sort().at(-1)), "utf8");
     assert.match(mail, /To: client@example\.com/);
     assert.match(mail, /Milestone 1 · status APPROVED/);
+    assert.match(mail, /Finalized transactions for this project behind this result/);
+    assert.match(mail, /tx\/0x[0-9a-f]{64}/);
     assert.equal(await deliverOutbox(t.db, transport, config), 0, "nothing left to send");
   });
 });

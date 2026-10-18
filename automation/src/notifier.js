@@ -9,6 +9,9 @@
 
 import { nowSeconds } from "./db.js";
 
+/* Outcome emails are built only from FINALIZED contract state (the service
+ * reads "latest-final") and carry the finalized transactions behind them. */
+
 const short = (a) => `${String(a).slice(0, 8)}…${String(a).slice(-6)}`;
 
 const STATUS_EVENTS = {
@@ -135,6 +138,11 @@ export function renderEmail(event, { siteUrl, explorer }) {
   if (event.kind === "automation_paused") lines.push("The daily budget is used up. Every action remains available manually on the site.");
   if (event.kind === "step_needs_operator") lines.push("The service stopped this step and will not send another transaction for it. The operator has been alerted.");
 
+  if (event.provenance?.length) {
+    lines.push("", "Finalized transactions for this project behind this result (each FINALIZED with successful execution and consensus agreement):");
+    for (const p of event.provenance) lines.push(`  ${explorer}tx/${p.txId}${p.label ? ` — ${p.label}` : ""}`);
+  }
+
   return {
     subject: `[Escrow ${short(event.escrow)}] ${en} · ${fa}`,
     body: [
@@ -150,27 +158,49 @@ export function renderEmail(event, { siteUrl, explorer }) {
   };
 }
 
-/** Store an event once and fan it out to verified, active subscribers. */
-export function recordEvent(db, event, { siteUrl, explorer, chainId }) {
-  const now = nowSeconds();
-  const inserted = db
-    .prepare("INSERT OR IGNORE INTO events (key, escrow, kind, payload_json, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(event.key, event.escrow, event.kind, JSON.stringify(event.payload), now);
+export const FAN_OUT_DAYS = 14;
 
-  if (inserted.changes !== 1) return 0;
+/**
+ * Store an event once. Outcome events start "pending": they are only mailed
+ * after verified finalized provenance is attached (resolveProvenance in the
+ * service). Job events carry their own transaction and start "ready".
+ */
+export function createEvent(db, event, { state = "pending", batch = null, provenance = null, note = null } = {}, now = nowSeconds()) {
+  return (
+    db
+      .prepare("INSERT OR IGNORE INTO events (key, escrow, kind, payload_json, state, batch, provenance_json, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(event.key, event.escrow, event.kind, JSON.stringify(event.payload), state, batch, provenance ? JSON.stringify(provenance) : null, note, now).changes === 1
+  );
+}
 
-  const recipients = db
-    .prepare(
-      `SELECT DISTINCT email FROM consents
-       WHERE chain_id = ? AND lower(escrow) = lower(?) AND email_verified = 1 AND revoked_at IS NULL AND expires_at > ?`,
-    )
-    .all(chainId, event.escrow, now);
-  const { subject, body } = renderEmail(event, { siteUrl, explorer });
+/**
+ * Mail every ready event (younger than FAN_OUT_DAYS) to every confirmed,
+ * active subscriber of its escrow that has not received it yet. Running this
+ * every pass means a subscriber who confirms later still gets recent results,
+ * and nothing is lost to a restart.
+ */
+export function fanOut(db, { siteUrl, explorer, chainId }, now = nowSeconds()) {
+  const events = db.prepare("SELECT * FROM events WHERE state = 'ready' AND created_at >= ?").all(now - FAN_OUT_DAYS * 86400);
   const insert = db.prepare("INSERT OR IGNORE INTO outbox (event_key, email, subject, body, created_at) VALUES (?, ?, ?, ?, ?)");
+  let queued = 0;
 
-  for (const r of recipients) insert.run(event.key, r.email, subject, body, now);
+  for (const row of events) {
+    const recipients = db
+      .prepare(
+        `SELECT DISTINCT email FROM consents
+         WHERE chain_id = ? AND lower(escrow) = lower(?) AND email_verified = 1 AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .all(chainId, row.escrow, now);
 
-  return recipients.length;
+    if (!recipients.length) continue;
+
+    const event = { key: row.key, escrow: row.escrow, kind: row.kind, payload: JSON.parse(row.payload_json), provenance: row.provenance_json ? JSON.parse(row.provenance_json) : [] };
+    const { subject, body } = renderEmail(event, { siteUrl, explorer });
+
+    for (const r of recipients) queued += insert.run(row.key, r.email, subject, body, now).changes;
+  }
+
+  return queued;
 }
 
 export function verificationEmail({ email, token, escrow, apiUrl, scopesText }) {

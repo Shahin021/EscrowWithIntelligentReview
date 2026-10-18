@@ -38,6 +38,7 @@ export const baseConfig = (over = {}) => ({
   feeWaitSeconds: 60,
   rebroadcastSeconds: 0,
   maxEscrows: 50,
+  scanLookbackBlocks: 5000,
   siteUrl: "http://site/",
   publicApiUrl: "http://api",
   allowedOrigins: ["http://site"],
@@ -90,6 +91,8 @@ export function snapshot(over = {}) {
   };
 
   return {
+    finality: "final",
+    block: over.block ?? "1000",
     project,
     milestones: over.milestones || [milestone(0, { status: "AWAITING_DELIVERY" }), milestone(1)],
     outflows: over.outflows || [],
@@ -115,13 +118,34 @@ export function fakeChain({ snap = snapshot(), parties } = {}) {
     failReads: 0,
     genlayerResult: () => ({ statusName: "FINALIZED", txExecutionResultName: "FINISHED_WITH_RETURN", resultName: "AGREE" }),
 
+    txLogs: [], // { txId, block } of every GenLayer transaction sent to the escrow
+    logsError: null,
+    block: 1000,
+
+    /** Finalized state only, as src/chain.js reads it ("latest-final"). */
     async snapshot() {
       if (c.failReads > 0) {
         c.failReads -= 1;
         throw new Error("rpc unavailable");
       }
 
-      return structuredClone(c.snap);
+      return { ...structuredClone(c.snap), block: String(c.block) };
+    },
+    async transactionsTo(_escrow, from, to) {
+      if (c.logsError) throw new Error(c.logsError);
+      return c.txLogs.filter((t) => BigInt(t.block) >= BigInt(from) && BigInt(t.block) <= BigInt(to)).map((t) => ({ ...t, block: String(t.block) }));
+    },
+    async verdictOf(txId) {
+      const { classifyReceipt } = await import("../../dapp/src/workspace/finality.js");
+      const tx = c.glTxs.get(txId);
+      return classifyReceipt(tx ? { ...tx, recipient: ESCROW } : null, ESCROW);
+    },
+    /** An external wallet sends a GenLayer transaction to the escrow. */
+    external({ status = "FINALIZED", ok = true, block = (c.block += 1) } = {}) {
+      const txId = keccak256(toHex(`external:${c.txLogs.length}:${Math.random()}`));
+      c.txLogs.push({ txId, block });
+      c.glTxs.set(txId, { statusName: status, txExecutionResultName: ok ? "FINISHED_WITH_RETURN" : "FINISHED_WITH_ERROR", resultName: "AGREE" });
+      return txId;
     },
     async attempts() {
       return c.attemptsList || [];
@@ -170,15 +194,17 @@ export function fakeChain({ snap = snapshot(), parties } = {}) {
 
     /** Mine everything in the mempool: receipt with the consensus event. */
     mine({ status = "0x1", glResult } = {}) {
+      c.block += 1;
       for (const [hash, raw] of c.mempool) {
         const tx = parseTransaction(raw);
         const txId = keccak256(toHex(`gl:${hash}`));
         const topics = encodeEventTopics({ abi: [NEW_TX], eventName: "NewTransaction", args: { txId, recipient: ESCROW, activator: OPERATOR.address } });
 
+        c.txLogs.push({ txId, block: c.block });
         c.receipts.set(hash, {
           transactionHash: hash,
           status: status === "0x1" ? "success" : "reverted",
-          blockNumber: 100n,
+          blockNumber: BigInt(c.block),
           logs: [{ address: CHAIN.consensusMainContract.address, topics, data: "0x" }],
         });
         c.glTxs.set(txId, (glResult || c.genlayerResult)());
