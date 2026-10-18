@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS events (
   kind TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending',   -- pending (awaiting verified provenance) | ready
-  batch TEXT,                              -- block of the finalized snapshot that produced it
+  batch TEXT,                              -- block of the finalized snapshot that produced it (B1)
+  baseline TEXT,                           -- block of the previous finalized snapshot (B0)
   provenance_json TEXT,
   note TEXT,
   created_at INTEGER NOT NULL
@@ -92,10 +93,13 @@ CREATE TABLE IF NOT EXISTS escrow_txs (
   tx_id TEXT NOT NULL,
   evm_block TEXT,
   source TEXT NOT NULL,                    -- logs | service
+  method TEXT,                             -- decoded GenLayer call
+  args_json TEXT,
   verdict_json TEXT,
   final INTEGER NOT NULL DEFAULT 0,
   ok INTEGER NOT NULL DEFAULT 0,
-  cited_by TEXT,                           -- event batch that cited it
+  first_final_batch TEXT,                  -- snapshot block at which we first saw it final
+  cited_batch TEXT,                        -- snapshot (event batch) that cited it
   PRIMARY KEY (escrow, tx_id)
 );
 

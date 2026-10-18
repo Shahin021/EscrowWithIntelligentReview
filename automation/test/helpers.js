@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { testnetBradbury } from "genlayer-js/chains";
-import { encodeEventTopics, keccak256, parseTransaction, toHex } from "viem";
+import { decodeFunctionData, encodeEventTopics, keccak256, parseTransaction, toHex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 import { openDb } from "../src/db.js";
+import { innerCallData } from "../src/txbuild.js";
+import { decodeTxData } from "../src/provenance.js";
 
 export const CHAIN = testnetBradbury;
 export const ESCROW = "0x" + "e5".repeat(20);
@@ -38,6 +40,7 @@ export const baseConfig = (over = {}) => ({
   feeWaitSeconds: 60,
   rebroadcastSeconds: 0,
   maxEscrows: 50,
+  provenanceWaitSeconds: 6 * 3600,
   scanLookbackBlocks: 5000,
   siteUrl: "http://site/",
   publicApiUrl: "http://api",
@@ -135,17 +138,23 @@ export function fakeChain({ snap = snapshot(), parties } = {}) {
       if (c.logsError) throw new Error(c.logsError);
       return c.txLogs.filter((t) => BigInt(t.block) >= BigInt(from) && BigInt(t.block) <= BigInt(to)).map((t) => ({ ...t, block: String(t.block) }));
     },
-    async verdictOf(txId) {
+    txData: new Map(), // txId -> GenLayer txData (RLP [calldata, leaderOnly])
+    async inspect(txId) {
       const { classifyReceipt } = await import("../../dapp/src/workspace/finality.js");
       const tx = c.glTxs.get(txId);
-      return classifyReceipt(tx ? { ...tx, recipient: ESCROW } : null, ESCROW);
+      return { verdict: classifyReceipt(tx ? { ...tx, recipient: ESCROW } : null, ESCROW), call: decodeTxData(c.txData.get(txId)) };
     },
-    /** An external wallet sends a GenLayer transaction to the escrow. */
-    external({ status = "FINALIZED", ok = true, block = (c.block += 1) } = {}) {
+    /** An external wallet sends a GenLayer call to the escrow (call: [method, ...args]; omit for an undecodable tx). */
+    external({ status = "FINALIZED", ok = true, block = (c.block += 1), call = null } = {}) {
       const txId = keccak256(toHex(`external:${c.txLogs.length}:${Math.random()}`));
       c.txLogs.push({ txId, block });
       c.glTxs.set(txId, { statusName: status, txExecutionResultName: ok ? "FINISHED_WITH_RETURN" : "FINISHED_WITH_ERROR", resultName: "AGREE" });
+      if (call) c.txData.set(txId, innerCallData(call[0], call.slice(1)));
       return txId;
+    },
+    /** Change the verdict of a known transaction (finality arriving later). */
+    setResult(txId, result) {
+      c.glTxs.set(txId, result);
     },
     async attempts() {
       return c.attemptsList || [];
@@ -208,6 +217,8 @@ export function fakeChain({ snap = snapshot(), parties } = {}) {
           logs: [{ address: CHAIN.consensusMainContract.address, topics, data: "0x" }],
         });
         c.glTxs.set(txId, (glResult || c.genlayerResult)());
+        const decoded = decodeFunctionData({ abi: CHAIN.consensusMainContract.abi, data: tx.data });
+        c.txData.set(txId, decoded.args[4]);
         c.nonces.set(OPERATOR.address.toLowerCase(), (c.nonces.get(OPERATOR.address.toLowerCase()) || 0) + 1);
         void tx;
       }

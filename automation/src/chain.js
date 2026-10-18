@@ -12,6 +12,7 @@ import { readMilestone, readOutflows, readProject } from "../../dapp/src/escrow.
 import { readAttempts } from "../../dapp/src/workspace/history.js";
 import { readFinalityWindow } from "../../dapp/src/workspace/auto-tracker.js";
 import { classifyReceipt } from "../../dapp/src/workspace/finality.js";
+import { decodeTxData } from "./provenance.js";
 
 export function chainConfigFor(network) {
   const chain = chains[network];
@@ -75,11 +76,11 @@ export function createChain({ network, rpcUrl }, injected = {}) {
       return logs.map((l) => ({ txId: l.args.txId, evmHash: l.transactionHash, block: String(l.blockNumber) }));
     },
 
-    /** Classify one GenLayer transaction for `escrow` (FINALIZED is not success by itself). */
-    async verdictOf(txId, escrow) {
+    /** Classify one GenLayer transaction for `escrow` and decode its call. */
+    async inspect(txId, escrow) {
       const tx = await gl.getTransaction({ hash: txId });
 
-      return classifyReceipt(tx, escrow);
+      return { verdict: classifyReceipt(tx, escrow), call: decodeTxData(tx?.txData) };
     },
 
     estimateGas: ({ from, to, data }) => evm.estimateGas({ account: from, to, data, value: 0n }),

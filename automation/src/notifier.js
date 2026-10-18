@@ -55,6 +55,7 @@ export function diffEvents(escrow, before, after, attempts = []) {
         amount: m.amount,
         reason: attempt?.reason || null,
         criteriaBits: attempt?.criteriaBits || null,
+        attemptCount: m.attemptCount,
         recoveryDeadline: m.evidenceRecoveryDeadline,
         appealExpiry: m.appealExpiry,
         outflow: outflow ? { id: outflow.id, amount: outflow.amount, recipient: outflow.recipient } : null,
@@ -139,8 +140,10 @@ export function renderEmail(event, { siteUrl, explorer }) {
   if (event.kind === "step_needs_operator") lines.push("The service stopped this step and will not send another transaction for it. The operator has been alerted.");
 
   if (event.provenance?.length) {
-    lines.push("", "Finalized transactions for this project behind this result (each FINALIZED with successful execution and consensus agreement):");
-    for (const p of event.provenance) lines.push(`  ${explorer}tx/${p.txId}${p.label ? ` — ${p.label}` : ""}`);
+    lines.push("", "Transaction that produced this result (decoded call matched; FINALIZED with successful execution and consensus agreement):");
+    for (const p of event.provenance) lines.push(`  ${p.method ? `${p.method} · ` : ""}${explorer}tx/${p.txId}${p.label ? ` — ${p.label}` : ""}`);
+  } else if (event.note) {
+    lines.push("", event.note);
   }
 
   return {
@@ -165,11 +168,11 @@ export const FAN_OUT_DAYS = 14;
  * after verified finalized provenance is attached (resolveProvenance in the
  * service). Job events carry their own transaction and start "ready".
  */
-export function createEvent(db, event, { state = "pending", batch = null, provenance = null, note = null } = {}, now = nowSeconds()) {
+export function createEvent(db, event, { state = "pending", batch = null, baseline = null, provenance = null, note = null } = {}, now = nowSeconds()) {
   return (
     db
-      .prepare("INSERT OR IGNORE INTO events (key, escrow, kind, payload_json, state, batch, provenance_json, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(event.key, event.escrow, event.kind, JSON.stringify(event.payload), state, batch, provenance ? JSON.stringify(provenance) : null, note, now).changes === 1
+      .prepare("INSERT OR IGNORE INTO events (key, escrow, kind, payload_json, state, batch, baseline, provenance_json, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(event.key, event.escrow, event.kind, JSON.stringify(event.payload), state, batch, baseline, provenance ? JSON.stringify(provenance) : null, note, now).changes === 1
   );
 }
 
@@ -194,7 +197,7 @@ export function fanOut(db, { siteUrl, explorer, chainId }, now = nowSeconds()) {
 
     if (!recipients.length) continue;
 
-    const event = { key: row.key, escrow: row.escrow, kind: row.kind, payload: JSON.parse(row.payload_json), provenance: row.provenance_json ? JSON.parse(row.provenance_json) : [] };
+    const event = { key: row.key, escrow: row.escrow, kind: row.kind, payload: JSON.parse(row.payload_json), provenance: row.provenance_json ? JSON.parse(row.provenance_json) : [], note: row.note };
     const { subject, body } = renderEmail(event, { siteUrl, explorer });
 
     for (const r of recipients) queued += insert.run(row.key, r.email, subject, body, now).changes;

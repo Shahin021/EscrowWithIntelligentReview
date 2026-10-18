@@ -11,6 +11,7 @@ import { nextExpected, planActions } from "./planner.js";
 import { createExecutor, enqueue, TERMINAL } from "./executor.js";
 import { createEvent, diffEvents, fanOut, jobEvent, verificationEmail } from "./notifier.js";
 import { deliverOutbox } from "./mailer.js";
+import { findCause } from "./provenance.js";
 
 const EXPECTED_INTERFACE = "genlayer.milestone-escrow.v2";
 const lower = (v) => String(v || "").toLowerCase();
@@ -48,18 +49,25 @@ export function createService({ db, chain, account, config, transport, log = () 
     return planActions(snapshot, activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role })));
   };
 
-  /** Remember a GenLayer transaction for an escrow (from logs or from our own job). */
-  const noteTx = (escrow, txId, { block = null, source, verdict = null }) => {
-    db.prepare("INSERT OR IGNORE INTO escrow_txs (escrow, tx_id, evm_block, source) VALUES (?, ?, ?, ?)").run(escrow.toLowerCase(), txId.toLowerCase(), block, source);
+  /**
+   * Remember a GenLayer transaction for an escrow (from logs or from our own
+   * job): inclusion block, decoded call, verdict, and the snapshot at which we
+   * first saw it final (the ordering bound for provenance).
+   */
+  const noteTx = (escrow, txId, { block = null, source, verdict = null, call = null, batch = null }) => {
+    const e = escrow.toLowerCase();
+    const id = txId.toLowerCase();
+
+    db.prepare("INSERT OR IGNORE INTO escrow_txs (escrow, tx_id, evm_block, source) VALUES (?, ?, ?, ?)").run(e, id, block, source);
+    if (block !== null) db.prepare("UPDATE escrow_txs SET evm_block = ? WHERE escrow = ? AND tx_id = ? AND evm_block IS NULL").run(block, e, id);
+    if (call) db.prepare("UPDATE escrow_txs SET method = ?, args_json = ? WHERE escrow = ? AND tx_id = ? AND method IS NULL").run(call.method, JSON.stringify(call.args), e, id);
 
     if (verdict) {
-      db.prepare("UPDATE escrow_txs SET verdict_json = ?, final = ?, ok = ? WHERE escrow = ? AND tx_id = ?").run(
-        JSON.stringify(verdict),
-        verdict.final ? 1 : 0,
-        verdict.ok ? 1 : 0,
-        escrow.toLowerCase(),
-        txId.toLowerCase(),
-      );
+      db.prepare("UPDATE escrow_txs SET verdict_json = ?, final = ?, ok = ? WHERE escrow = ? AND tx_id = ?").run(JSON.stringify(verdict), verdict.final ? 1 : 0, verdict.ok ? 1 : 0, e, id);
+
+      if (verdict.final && batch !== null) {
+        db.prepare("UPDATE escrow_txs SET first_final_batch = ? WHERE escrow = ? AND tx_id = ? AND first_final_batch IS NULL").run(String(batch), e, id);
+      }
     }
   };
 
@@ -69,7 +77,9 @@ export function createService({ db, chain, account, config, transport, log = () 
     if (job?.gl_tx_id) {
       const verdict = job.verdict_json ? JSON.parse(job.verdict_json) : null;
 
-      noteTx(job.escrow, job.gl_tx_id, { block: job.evm_block, source: "service", verdict: verdict?.final ? verdict : null });
+      // Recorded with its call; its finality is confirmed (and first seen)
+      // through refreshVerdicts, on the same snapshot clock as every other tx.
+      noteTx(job.escrow, job.gl_tx_id, { block: job.evm_block, source: "service", call: { method: job.function_name, args: JSON.parse(job.args_json) } });
     }
 
     const event = jobEvent(e);
@@ -79,7 +89,7 @@ export function createService({ db, chain, account, config, transport, log = () 
     // A job event cites its own transaction (or none, for budget/cap stops,
     // which claim no outcome).
     const verdict = job?.verdict_json ? JSON.parse(job.verdict_json) : null;
-    const provenance = job?.gl_tx_id ? [{ txId: job.gl_tx_id, label: verdict?.label || null }] : [];
+    const provenance = job?.gl_tx_id ? [{ txId: job.gl_tx_id, method: job.function_name, label: verdict?.label || null }] : [];
 
     createEvent(db, event, { state: "ready", provenance }, now());
   };
@@ -101,14 +111,14 @@ export function createService({ db, chain, account, config, transport, log = () 
     }
   }
 
-  async function refreshVerdicts(escrow) {
-    const open = db.prepare("SELECT tx_id FROM escrow_txs WHERE escrow = ? AND final = 0 LIMIT 25").all(escrow.toLowerCase());
+  async function refreshVerdicts(escrow, batch) {
+    const open = db.prepare("SELECT tx_id FROM escrow_txs WHERE escrow = ? AND (final = 0 OR method IS NULL) LIMIT 25").all(escrow.toLowerCase());
 
     for (const row of open) {
       try {
-        const verdict = await chain.verdictOf(row.tx_id, escrow);
+        const { verdict, call } = await chain.inspect(row.tx_id, escrow);
 
-        noteTx(escrow, row.tx_id, { source: "logs", verdict });
+        noteTx(escrow, row.tx_id, { source: "logs", verdict, call, batch });
       } catch {
         /* retried next pass */
       }
@@ -116,43 +126,42 @@ export function createService({ db, chain, account, config, transport, log = () 
   }
 
   /**
-   * Attach verified finalized provenance to pending outcome events, batch by
-   * batch: every successful FINALIZED transaction for the escrow, not yet cited,
-   * included at or before the snapshot that showed the outcome. Without one,
-   * the event stays pending (and visible in the status API); it is never
-   * mailed on contract state alone.
+   * Attach the transaction that caused each pending outcome (see
+   * src/provenance.js for the rules). An event without a provable cause
+   * waits; after config.provenanceWaitSeconds it is reported as finalized
+   * contract state, explicitly WITHOUT naming any transaction.
    */
   function resolveProvenance(escrow, scanNote) {
-    const batches = db
-      .prepare("SELECT DISTINCT batch FROM events WHERE lower(escrow) = lower(?) AND state = 'pending' ORDER BY CAST(batch AS INTEGER)")
-      .all(escrow)
-      .map((r) => r.batch);
+    const pending = db.prepare("SELECT * FROM events WHERE lower(escrow) = lower(?) AND state = 'pending' ORDER BY id").all(escrow);
 
-    for (const batch of batches) {
+    for (const row of pending) {
       immediate(db, () => {
-        const txs = db
-          .prepare("SELECT tx_id, verdict_json FROM escrow_txs WHERE escrow = ? AND final = 1 AND ok = 1 AND cited_by IS NULL AND (evm_block IS NULL OR CAST(evm_block AS INTEGER) <= ?)")
-          .all(escrow.toLowerCase(), Number(batch));
+        const txs = db.prepare("SELECT * FROM escrow_txs WHERE escrow = ?").all(escrow.toLowerCase());
+        const event = { kind: row.kind, payload: JSON.parse(row.payload_json), batch: row.batch, baseline: row.baseline };
+        const cause = findCause(event, txs);
 
-        if (!txs.length) {
-          db.prepare("UPDATE events SET note = ? WHERE lower(escrow) = lower(?) AND batch = ? AND state = 'pending'").run(
-            `waiting for a verified finalized transaction behind this result${scanNote ? ` (${scanNote})` : ""}`,
-            escrow,
-            batch,
+        if (cause.txId) {
+          const tx = txs.find((t) => t.tx_id === cause.txId);
+
+          db.prepare("UPDATE escrow_txs SET cited_batch = ? WHERE escrow = ? AND tx_id = ?").run(String(row.batch), escrow.toLowerCase(), cause.txId);
+          db.prepare("UPDATE events SET state = 'ready', provenance_json = ?, note = NULL WHERE id = ? AND state = 'pending'").run(
+            JSON.stringify([{ txId: cause.txId, method: cause.method, label: tx?.verdict_json ? JSON.parse(tx.verdict_json).label : null }]),
+            row.id,
           );
 
           return;
         }
 
-        const provenance = txs.map((t) => ({ txId: t.tx_id, label: t.verdict_json ? JSON.parse(t.verdict_json).label : null }));
+        const waitedTooLong = now() - row.created_at >= config.provenanceWaitSeconds;
 
-        for (const t of txs) db.prepare("UPDATE escrow_txs SET cited_by = ? WHERE escrow = ? AND tx_id = ?").run(batch, escrow.toLowerCase(), t.tx_id);
-
-        db.prepare("UPDATE events SET state = 'ready', provenance_json = ?, note = NULL WHERE lower(escrow) = lower(?) AND batch = ? AND state = 'pending'").run(
-          JSON.stringify(provenance),
-          escrow,
-          batch,
-        );
+        if (waitedTooLong) {
+          db.prepare("UPDATE events SET state = 'ready', provenance_json = '[]', note = ? WHERE id = ? AND state = 'pending'").run(
+            "This result is read from the contract's finalized state. The transaction that produced it could not be identified, so none is named here.",
+            row.id,
+          );
+        } else {
+          db.prepare("UPDATE events SET note = ? WHERE id = ? AND state = 'pending'").run(`${cause.waiting}${scanNote ? ` (${scanNote})` : ""}`, row.id);
+        }
       });
     }
   }
@@ -281,7 +290,7 @@ export function createService({ db, chain, account, config, transport, log = () 
             scanNote = `transaction log search unavailable: ${String(error?.shortMessage || error?.message || error).slice(0, 120)}`;
           }
 
-          await refreshVerdicts(escrow);
+          await refreshVerdicts(escrow, snapshot.block);
 
           const stored = db.prepare("SELECT json FROM snapshots WHERE lower(escrow) = lower(?)").get(escrow);
           const before = stored ? JSON.parse(stored.json) : null;
@@ -289,7 +298,7 @@ export function createService({ db, chain, account, config, transport, log = () 
           const attempts = changed ? await chain.attempts(escrow, snapshot.milestones.length).catch(() => []) : [];
 
           // Outcomes from finalized state only; mailed after provenance is verified.
-          for (const event of diffEvents(escrow, before, snapshot, attempts)) createEvent(db, event, { state: "pending", batch: snapshot.block }, now());
+          for (const event of diffEvents(escrow, before, snapshot, attempts)) createEvent(db, event, { state: "pending", batch: snapshot.block, baseline: before?.block ?? null }, now());
 
           db.prepare("INSERT INTO snapshots (escrow, json, updated_at) VALUES (?, ?, ?) ON CONFLICT(escrow) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at").run(
             escrow,

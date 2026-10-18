@@ -329,7 +329,7 @@ silently dropped, and exactly-once external delivery is not promised.
 
 CORS is limited to `AUTOMATION_ALLOWED_ORIGINS`.
 
-**Service tests:** 54, using `node --test` with a simulated chain. They
+**Service tests:** 63, using `node --test` with a simulated chain. They
 cover:
 
 - planner rules;
@@ -600,3 +600,95 @@ estimate for the exact constructor arguments.
 
   Put the database and the key file on that host, and keep only one
   operator key per database.
+
+
+## 9. Second review fixes (AUTOMATION_V3_R2_REVIEW)
+
+### 9.1 Provenance names the transaction that caused the outcome
+
+**What was wrong.** Before this fix, any uncited successful transaction to
+the escrow could be cited, including one that was already final before the
+outcome.
+
+**How the cause is found now** (`automation/src/provenance.js`). Each
+outcome event stores its baseline B0 (the previous finalized snapshot) and
+its outcome snapshot B1. A transaction is cited only if all of these hold:
+
+- **Call:** its decoded GenLayer call is the one that produces the
+  transition:
+
+  | Outcome | Call that must match |
+  |---|---|
+  | approved, revision required, evidence unavailable | `resolve(m)` |
+  | rejected | `resolve(m)` or `abort_failed_appeal(m)` |
+  | payment or refund completed | `confirm_outflow(id)` for exactly that transfer |
+  | project funded | `activate_funding()` |
+  | project closed | `close_project()` |
+
+- **Result:** it is FINALIZED with successful execution and AGREE.
+- **Inclusion:** it was included at or before B1.
+- **Not stale:** the service did not already see it final at or before B0.
+- **Attempt anchor:** for review outcomes, it was included after the latest
+  finalized `submit_deliverable` / `replace_evidence` / `appeal` for that
+  milestone.
+- **Not reused:** no other snapshot has already cited it.
+
+The call is decoded from the GenLayer transaction's own `txData`.
+
+**When no transaction qualifies:**
+
+1. The event stays pending. The status API shows the reason.
+2. After `AUTOMATION_PROVENANCE_WAIT_SECONDS` (default 6 h), the event is
+   reported as finalized contract state. The email says explicitly that the
+   transaction could not be identified, and it names none.
+
+SMTP delivery is still at-least-once.
+
+**Tests:**
+
+- an old successful call already final at the baseline is never cited;
+- an undecodable transaction is never cited;
+- these are never cited:
+  - another milestone's call;
+  - another method;
+  - a call included after the outcome;
+- the right call is cited, named in exactly one email, and not repeated
+  after a restart;
+- two milestones in one poll each get their own cause;
+- late log discovery still resolves the event;
+- a payment is tied to `confirm_outflow` of exactly that transfer, and
+  another transfer's confirmation is not accepted;
+- with no cause, after the wait the email names no transaction.
+
+The reviewer's reproduction (`reproduce-r2.mjs`) no longer reproduces this
+finding.
+
+### 9.2 One in-flight step per escrow, decided atomically
+
+**What changed.** The same-escrow check now also runs **inside** the
+`BEGIN IMMEDIATE` reservation, after the fresh read and before the nonce is
+taken. It is no longer only an early check before the RPC calls. The write
+lock is never held across RPC calls.
+
+**How the slot is held and released.** The "slot" is the durable job state
+itself: a step in `signing`, `signed`, `broadcast` or `tracking` holds it.
+Every terminal state releases it, and so does a restart, because the
+database is the only source of truth. Exact-byte retries and nonce
+reservation are unchanged.
+
+**Tests** (two independent database connections racing different steps of
+the same escrow):
+
+- only one step is reserved and broadcast;
+- the second waits while the first is ACCEPTED;
+- the second proceeds exactly once after the first finalizes, whether the
+  first succeeded or failed;
+- a restart keeps the second waiting;
+- different escrows proceed in parallel, with distinct nonces.
+
+The reviewer's reproduction no longer reproduces this finding either.
+
+### 9.3 Recovery window: no change
+
+As agreed, the window stays at 72 h to 30 days; nothing shorter than 72 h
+is allowed. This round needs no contract change and no new deployment.

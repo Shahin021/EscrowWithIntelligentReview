@@ -10,7 +10,7 @@ import { createChain } from "../src/chain.js";
 import { createTransport } from "../src/mailer.js";
 import { planActions } from "../src/planner.js";
 import { SCOPES } from "../src/consent.js";
-import { CLIENT, ESCROW, NOW, OPERATOR, WORKER, baseConfig, fakeChain, milestone, signConsent, snapshot, tempDb } from "./helpers.js";
+import { CHAIN, CLIENT, ESCROW, NOW, OPERATOR, WORKER, baseConfig, fakeChain, milestone, signConsent, snapshot, tempDb } from "./helpers.js";
 
 const grantW = { client: null, worker: { max_amount: "1000", expires_at: String(NOW + 86400) } };
 const jobs = (db) => db.prepare("SELECT * FROM jobs ORDER BY id").all();
@@ -106,74 +106,249 @@ describe("1. dependent steps wait for a finalized, successful predecessor", () =
   });
 });
 
-describe("2. outcome emails need finalized state and verified finalized provenance", () => {
-  async function confirmed(chain, t) {
-    const h = await make({ chain, dbFile: t.path, mail: true, dir: t.dir, config: { sendingEnabled: false } });
-    await h.service.addConsent(await signConsent(CLIENT, { role: "client", scopes: SCOPES.REVIEW, email: "c@example.com" }));
-    h.db.prepare("UPDATE consents SET email_verified = 1").run();
-    await h.service.tick();
-    return h;
+describe("Codex r2 #2: one in-flight step per escrow, decided atomically", () => {
+  async function race({ escrows = [ESCROW, ESCROW] } = {}) {
+    const { createExecutor, enqueue } = await import("../src/executor.js");
+    const t = tempDb();
+    const db2 = openDb(t.path);
+    const chain = fakeChain();
+    const plans = [
+      { key: "resolve:0:1", functionName: "resolve", args: [0], scope: SCOPES.REVIEW, amount: "0", reason: "r", consentIds: [1] },
+      { key: "mark_review_stalled:0:1", functionName: "mark_review_stalled", args: [0], scope: SCOPES.RECOVER, amount: "0", reason: "s", consentIds: [1] },
+    ];
+    plans.forEach((p, i) => enqueue(t.db, { chainId: CHAIN.id, escrow: escrows[i] }, p, NOW));
+    let arrivals = 0;
+    let release;
+    const barrier = new Promise((r) => { release = r; });
+    chain.estimateGas = async () => { if (++arrivals === 2) release(); await barrier; return 200_000n; };
+    const opts = { chain, chainConfig: CHAIN, account: OPERATOR, config: baseConfig(), planFresh: async () => plans, consentsActive: () => true };
+    const a = createExecutor({ ...opts, db: t.db });
+    const b = createExecutor({ ...opts, db: db2 });
+    await Promise.all([a.step(t.db.prepare("SELECT * FROM jobs WHERE id = 1").get(), NOW), b.step(db2.prepare("SELECT * FROM jobs WHERE id = 2").get(), NOW)]);
+    return { t, db2, chain, a, b, rows: () => t.db.prepare("SELECT id, function_name, state, nonce FROM jobs ORDER BY id").all() };
+  }
+
+  it("two processes racing DIFFERENT steps of the SAME escrow: only one is reserved and broadcast", async () => {
+    const r = await race();
+    const states = r.rows().map((j) => j.state).sort();
+    assert.deepEqual(states, ["broadcast", "queued"]);
+    assert.equal(r.chain.sent.length, 1);
+  });
+
+  it("the waiting step proceeds only after the first is final; a failed final verdict also releases it, once", async () => {
+    for (const glResult of [
+      () => ({ statusName: "FINALIZED", txExecutionResultName: "FINISHED_WITH_RETURN", resultName: "AGREE" }),
+      () => ({ statusName: "FINALIZED", txExecutionResultName: "FINISHED_WITH_ERROR", resultName: "AGREE" }),
+    ]) {
+      const r = await race();
+      r.chain.estimateGas = async () => 200_000n;
+      r.chain.genlayerResult = () => ({ statusName: "ACCEPTED", resultName: "AGREE" });
+      r.chain.mine();
+      await r.a.runOnce(NOW); // first: tracking (ACCEPTED)
+      await r.b.runOnce(NOW);
+      assert.equal(r.chain.sent.length, 1, "second still waits while the first is only ACCEPTED");
+      const first = r.rows().find((j) => j.state === "tracking");
+      r.chain.setResult(r.t.db.prepare("SELECT gl_tx_id FROM jobs WHERE id = ?").get(first.id).gl_tx_id, glResult());
+      await r.a.runOnce(NOW); // first final -> done/failed
+      await Promise.all([r.a.runOnce(NOW), r.b.runOnce(NOW)]); // both race for the second
+      assert.equal(new Set(r.chain.sent).size, 2);
+      assert.equal(r.rows().filter((j) => ["signing", "signed", "broadcast", "tracking"].includes(j.state)).length, 1);
+    }
+  });
+
+  it("restart while one step is in flight: the other still waits", async () => {
+    const r = await race();
+    r.chain.estimateGas = async () => 200_000n;
+    const { createExecutor } = await import("../src/executor.js");
+    const fresh = createExecutor({ db: openDb(r.t.path), chain: r.chain, chainConfig: CHAIN, account: OPERATOR, config: baseConfig(), planFresh: async () => [
+      { key: "resolve:0:1" }, { key: "mark_review_stalled:0:1" }].map((p) => ({ ...p })), consentsActive: () => true });
+    await fresh.runOnce(NOW);
+    assert.equal(r.chain.sent.length >= 1, true);
+    assert.equal(new Set(r.chain.sent).size, 1);
+  });
+
+  it("different escrows do not block each other", async () => {
+    const r = await race({ escrows: [ESCROW, "0x" + "e6".repeat(20)] });
+    assert.deepEqual(r.rows().map((j) => j.state), ["broadcast", "broadcast"]);
+    assert.equal(new Set(r.rows().map((j) => j.nonce)).size, 2);
+  });
+});
+
+describe("2. outcome emails need finalized state and the transaction that caused them", () => {
+  async function confirmed(chain, t, clock = { now: NOW }) {
+    const db = openDb(t.path);
+    const cfg = baseConfig({ sendingEnabled: false, mailTransport: "file", mailOutboxDir: join(t.dir, "outbox"), mailFrom: "t@localhost" });
+    const service = createService({ db, chain, account: OPERATOR, config: cfg, transport: await createTransport(cfg), now: () => clock.now });
+    if (!db.prepare("SELECT count(*) n FROM consents").get().n) {
+      await service.addConsent(await signConsent(CLIENT, { role: "client", scopes: SCOPES.REVIEW, email: "c@example.com" }));
+      db.prepare("UPDATE consents SET email_verified = 1").run();
+    }
+    return { db, service };
   }
   const outcomeMails = (h) => h.db.prepare("SELECT * FROM outbox WHERE event_key NOT LIKE 'verify:%'").all();
+  const event = (h, kind) => h.db.prepare("SELECT * FROM events WHERE kind = ?").get(kind);
+  const submit = (chain, m = 0) => chain.external({ call: ["submit_deliverable", m, "https://x.org/e", ""] });
 
-  it("an ACCEPTED approval sends nothing; an approval with no verified final transaction stays pending, visibly", async () => {
+  it("an ACCEPTED approval sends nothing; without its causing transaction the approval stays pending, visibly", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
+    submit(chain);
     const h = await confirmed(chain, t);
-    chain.external({ status: "ACCEPTED" }); // not final: finalized state is unchanged
+    await h.service.tick();
+    chain.external({ status: "ACCEPTED", call: ["resolve", 0] });
     await h.service.tick();
     assert.equal(outcomeMails(h).length, 0);
-
-    // State moves, but the only transaction is not a finalized success: pending.
     chain.snap = approved();
     await h.service.tick();
     assert.equal(outcomeMails(h).length, 0);
     const status = await h.service.publicStatus(ESCROW);
     assert.equal(status.notifications[0].state, "pending");
-    assert.match(status.notifications[0].note, /waiting for a verified finalized transaction/);
+    assert.match(status.notifications[0].note, /no finalized transaction matching this transition/);
   });
 
-  it("a final failure produces no approval email", async () => {
+  it("Codex r2 #1: an old successful transaction (seen final at the baseline) is never cited", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
+    submit(chain);
+    const old = chain.external({ call: ["resolve", 0] }); // an earlier attempt's review, already final
+    const unrelated = chain.external({}); // undecodable
     const h = await confirmed(chain, t);
-    chain.external({ status: "FINALIZED", ok: false });
-    for (let i = 0; i < 3; i += 1) await h.service.tick();
+    await h.service.tick();
+    chain.external({ status: "ACCEPTED", call: ["resolve", 0] });
+    chain.snap = approved();
+    await h.service.tick();
+    const e = event(h, "review_approved");
+    assert.equal(e.state, "pending");
+    assert.ok(!String(e.provenance_json).includes(old.slice(2)));
+    assert.ok(!String(e.provenance_json).includes(unrelated.slice(2)));
     assert.equal(outcomeMails(h).length, 0);
   });
 
-  it("a final success emits once, with its transaction, and not again after a restart", async () => {
+  it("a later or unrelated call cannot be the cause: other milestone, other method, or after the outcome snapshot", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
+    submit(chain);
     const h = await confirmed(chain, t);
-    const txId = chain.external({ status: "FINALIZED", ok: true });
+    await h.service.tick();
+    chain.external({ call: ["resolve", 1] });
+    chain.external({ call: ["mark_review_stalled", 0] });
+    chain.snap = approved();
+    await h.service.tick();
+    chain.external({ call: ["resolve", 0] }); // included after the outcome snapshot
+    await h.service.tick();
+    assert.equal(event(h, "review_approved").state, "pending");
+    assert.equal(outcomeMails(h).length, 0);
+  });
+
+  it("only the verified, relevant, final call resolves it; one email that names it; nothing more after a restart", async () => {
+    const t = tempDb();
+    const chain = fakeChain({ snap: review() });
+    submit(chain);
+    let h = await confirmed(chain, t);
+    await h.service.tick();
+    const cause = chain.external({ call: ["resolve", 0] });
     chain.snap = approved();
     await h.service.tick();
     let mails = outcomeMails(h);
     assert.equal(mails.length, 1);
-    assert.match(mails[0].body, new RegExp(txId.slice(2)));
+    assert.match(mails[0].body, new RegExp(`resolve · .*${cause.slice(2)}`));
 
-    const again = await make({ chain, dbFile: t.path, mail: true, dir: t.dir, config: { sendingEnabled: false } });
-    await again.service.tick();
-    await again.service.tick();
-    mails = outcomeMails(again);
-    assert.equal(mails.length, 1);
+    h = await confirmed(chain, t);
+    await h.service.tick();
+    await h.service.tick();
+    assert.equal(outcomeMails(h).length, 1);
     assert.equal(readdirSync(join(t.dir, "outbox")).length, 2, "verification + one approval");
+  });
+
+  it("several milestones and events in one poll each get their own cause", async () => {
+    const t = tempDb();
+    const two = (s0, s1) => snapshot({ milestones: [milestone(0, { status: s0, attemptCount: 1 }), milestone(1, { status: s1, attemptCount: 1 })], grants: grantW });
+    const chain = fakeChain({ snap: two("UNDER_REVIEW", "UNDER_REVIEW") });
+    submit(chain, 0);
+    submit(chain, 1);
+    const h = await confirmed(chain, t);
+    await h.service.tick();
+    const c0 = chain.external({ call: ["resolve", 0] });
+    const c1 = chain.external({ call: ["resolve", 1] });
+    chain.snap = two("APPROVED", "REVISION_REQUIRED");
+    await h.service.tick();
+    const approvedEvent = event(h, "review_approved");
+    const revision = event(h, "revision_required");
+    assert.equal(JSON.parse(approvedEvent.provenance_json)[0].txId, c0);
+    assert.equal(JSON.parse(revision.provenance_json)[0].txId, c1);
+    assert.equal(outcomeMails(h).length, 2);
+  });
+
+  it("late log discovery: the cause found on a later pass still resolves the event", async () => {
+    const t = tempDb();
+    const chain = fakeChain({ snap: review() });
+    submit(chain);
+    const h = await confirmed(chain, t);
+    await h.service.tick();
+    const cause = chain.external({ call: ["resolve", 0] });
+    chain.logsError = "eth_getLogs temporarily refused";
+    chain.snap = approved();
+    await h.service.tick();
+    assert.equal(event(h, "review_approved").state, "pending");
+    assert.match(event(h, "review_approved").note, /log search unavailable/);
+    chain.logsError = null;
+    await h.service.tick();
+    assert.equal(JSON.parse(event(h, "review_approved").provenance_json)[0].txId, cause);
+    assert.equal(outcomeMails(h).length, 1);
+  });
+
+  it("a payment is tied to confirm_outflow of exactly that transfer", async () => {
+    const paying = (status, outflowStatus) => snapshot({
+      milestones: [milestone(0, { status }), milestone(1)],
+      outflows: [{ id: 4, kind: "MILESTONE_PAYOUT", status: outflowStatus, amount: "1000", recipient: WORKER.address, milestone: 0 }],
+    });
+    for (const withCause of [false, true]) {
+      const t = tempDb();
+      const chain = fakeChain({ snap: paying("PAYMENT_PENDING", "EMITTED") });
+      const h = await confirmed(chain, t);
+      await h.service.tick();
+      chain.external({ call: ["confirm_outflow", 3] }); // another transfer
+      const cause = withCause ? chain.external({ call: ["confirm_outflow", 4] }) : null;
+      chain.snap = paying("RELEASED", "CONFIRMED");
+      await h.service.tick();
+      const e = event(h, "payment_completed");
+      if (withCause) assert.equal(JSON.parse(e.provenance_json)[0].txId, cause);
+      else assert.equal(e.state, "pending");
+    }
+  });
+
+  it("with no provable cause, after the wait it is reported as finalized state naming no transaction", async () => {
+    const t = tempDb();
+    const clock = { now: NOW };
+    const chain = fakeChain({ snap: review() });
+    const h = await confirmed(chain, t, clock);
+    await h.service.tick();
+    chain.snap = approved(); // no submission anchor, no decodable cause
+    await h.service.tick();
+    assert.equal(outcomeMails(h).length, 0);
+    clock.now = NOW + 6 * 3600;
+    await h.service.tick();
+    const [mail] = outcomeMails(h);
+    assert.match(mail.body, /could not be identified, so none is named/);
+    assert.doesNotMatch(mail.body, /tx\/0x/);
   });
 
   it("an event is not lost for a subscriber who confirms the address later", async () => {
     const t = tempDb();
     const chain = fakeChain({ snap: review() });
-    const h = await make({ chain, mail: true, dir: t.dir, config: { sendingEnabled: false } });
-    await h.service.addConsent(await signConsent(CLIENT, { role: "client", scopes: SCOPES.REVIEW, email: "c@example.com" }));
-    await h.service.tick();
-    chain.external({ status: "FINALIZED", ok: true });
+    submit(chain);
+    const db = openDb(t.path);
+    const cfg = baseConfig({ sendingEnabled: false, mailTransport: "file", mailOutboxDir: join(t.dir, "outbox"), mailFrom: "t@localhost" });
+    const service = createService({ db, chain, account: OPERATOR, config: cfg, transport: await createTransport(cfg), now: () => NOW });
+    await service.addConsent(await signConsent(CLIENT, { role: "client", scopes: SCOPES.REVIEW, email: "c@example.com" }));
+    await service.tick();
+    chain.external({ call: ["resolve", 0] });
     chain.snap = approved();
-    await h.service.tick();
-    assert.equal(outcomeMails(h).length, 0);
-    h.db.prepare("UPDATE consents SET email_verified = 1").run();
-    await h.service.tick();
-    assert.equal(outcomeMails(h).length, 1);
+    await service.tick();
+    assert.equal(outcomeMails({ db }).length, 0);
+    db.prepare("UPDATE consents SET email_verified = 1").run();
+    await service.tick();
+    assert.equal(outcomeMails({ db }).length, 1);
   });
 });
 

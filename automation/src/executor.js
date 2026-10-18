@@ -111,6 +111,7 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
     if (!canSend()) return; // tracking-only mode: nothing is signed
 
     // Dependent steps wait until every earlier step of this escrow is final.
+    // (Cheap early exit; the binding check is repeated inside the reservation.)
     if (predecessorOpen(job)) return;
 
     // The step must still be needed, exactly, on fresh chain state.
@@ -185,6 +186,11 @@ export function createExecutor({ db, chain, chainConfig, account, config, planFr
         const fresh = getJob(db, job.id);
 
         if (fresh.state !== "queued") return false;
+
+        // Single flight per escrow, decided inside the write lock: another
+        // process may have reserved a different step for this escrow while we
+        // were re-planning and estimating. Then this one waits.
+        if (predecessorOpen(fresh)) return false;
 
         const spent = spentToday(db, now);
 
