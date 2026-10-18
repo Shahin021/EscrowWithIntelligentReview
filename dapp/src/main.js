@@ -32,9 +32,11 @@ import { confirmReadiness, readChainTime, readContractBalance, recoveryPlan } fr
 import { classifyReceipt, collectProjectTransactions, scanNewTransactionLogs } from "./workspace/finality.js";
 import { estimateDeployGas, OBSERVED_GAS_CAP, projectGas, validateProject, verifyCreatedProject } from "./workspace/create.js";
 import { createAutoTracker, readFinalityWindow, windowLabel } from "./workspace/auto-tracker.js";
-import { ARTIFACT, loadArtifact } from "./workspace/artifact.js";
+import { giveConsent, readGrants, revokeConsent, roleScopes, serviceInfo, serviceStatus } from "./workspace/automation-client.js";
+import { ARTIFACTS, loadArtifact } from "./workspace/artifact.js";
 import {
   activityPanel,
+  automationPanel,
   createPanel,
   criteriaBlock,
   finalityPanel,
@@ -89,6 +91,10 @@ let sending = false;
 let chainTime = null; // { seconds, block, readAt }
 let history = null; // { ok, attempts, criteria[], error }
 const resuming = new Set();
+
+/* Optional automation service (VITE_AUTOMATION_URL). Off unless configured and chosen. */
+const automationUrl = String((import.meta.env || {}).VITE_AUTOMATION_URL || "").replace(/\/$/, "");
+const auto = { info: null, status: null, grants: null, form: { scopes: 0, email: "", days: "30", maxAmount: "" }, busy: false, message: "", loadedAt: 0 };
 const finalityWindows = new Map();
 let projectRefreshPending = false;
 let projectRefreshing = false;
@@ -608,7 +614,7 @@ async function runAction(action, { milestoneIndex = 0, outflowId, input = {} } =
     }
   }
 
-  const scoped = isProjectScoped(action) || action === "confirm_outflow" || action === "redirect_outflow";
+  const scoped = isProjectScoped(action) || ["confirm_outflow", "redirect_outflow", "set_automation"].includes(action);
   const label = `${methodFor(action).label}${scoped ? (outflowId !== undefined ? ` · transfer #${outflowId}` : "") : ` · milestone ${milestoneIndex + 1}`}`;
 
   sending = true;
@@ -1016,7 +1022,7 @@ async function searchRegistry() {
 const DRAFT_KEY = "escrow-workspace:v2:create-draft";
 const emptyMilestone = () => ({ spec: "", amount: "", deliveryDays: "", criteria: [] });
 const form = Object.assign(
-  { worker: "", milestones: [emptyMilestone()], allowedSources: "", renderMode: "text", maxRevisions: "3", continueAfterRefund: false, registry: "" },
+  { worker: "", milestones: [emptyMilestone()], allowedSources: "", renderMode: "text", maxRevisions: "3", continueAfterRefund: false, registry: "", contractVersion: "v2" },
   storage.readJson(DRAFT_KEY, {}) || {},
 );
 let artifact = null;
@@ -1027,14 +1033,23 @@ let estimate = null;
 let deploying = false;
 let created = null; // { address, verify, entry }
 
-async function ensureArtifact() {
-  if (artifact || artifactError) return;
+const loadedArtifacts = {};
+const pinnedArtifact = () => ARTIFACTS[form.contractVersion] || ARTIFACTS.v2;
 
-  try {
-    artifact = await loadArtifact();
-  } catch (error) {
-    artifactError = error.message || String(error);
+/** Load (and hash-check) the artifact of the chosen contract version. */
+async function ensureArtifact() {
+  const version = ARTIFACTS[form.contractVersion] ? form.contractVersion : "v2";
+
+  if (!loadedArtifacts[version]) {
+    try {
+      loadedArtifacts[version] = { bytes: await loadArtifact({ artifact: ARTIFACTS[version] }) };
+    } catch (error) {
+      loadedArtifacts[version] = { error: error.message || String(error) };
+    }
   }
+
+  artifact = loadedArtifacts[version].bytes || null;
+  artifactError = loadedArtifacts[version].error || null;
 }
 
 function deployBlocker() {
@@ -1069,7 +1084,7 @@ function renderCreate() {
       errors: validation?.errors || [],
       preview,
       estimate,
-      artifact: artifact ? { sha256: ARTIFACT.sha256, bytes: artifact.length } : null,
+      artifact: artifact ? { sha256: pinnedArtifact().sha256, bytes: artifact.length, version: form.contractVersion } : null,
       canDeploy: !blocker,
       deployReason: blocker,
       deploying,
@@ -1139,6 +1154,12 @@ function bindCreate(node) {
       setPath(form, input.dataset.field, input.type === "checkbox" ? input.checked : input.value);
       saveDraft();
       invalidatePreview(node);
+
+      if (input.dataset.field === "contractVersion") {
+        preview = null;
+        estimate = null;
+        ensureArtifact().then(renderCreate);
+      }
     };
 
     input.addEventListener("input", handler);
@@ -1380,6 +1401,144 @@ async function refresh() {
 
   render();
   renderFinality();
+  loadAutomation();
+}
+
+async function loadAutomation() {
+  if (!project) return;
+
+  auto.loadedAt = Date.now();
+  auto.grants = controller.state.project ? await readGrants(rc(), project) : null;
+
+  if (automationUrl) {
+    auto.info = await serviceInfo(automationUrl).catch((error) => ({ error: String(error.message || error).slice(0, 120) }));
+    auto.status = auto.info?.error ? null : await serviceStatus(automationUrl, project).catch(() => null);
+  }
+
+  renderAutomation();
+}
+
+function renderAutomation() {
+  const node = el("automation-panel");
+
+  if (!node) return;
+
+  if (!project) {
+    node.hidden = true;
+
+    return;
+  }
+
+  // Do not wipe what the user is typing.
+  if (node.contains(document.activeElement) && document.activeElement?.matches("input, textarea, select")) return;
+
+  node.hidden = false;
+
+  const role = controller.role();
+
+  node.innerHTML = automationPanel({
+    serviceUrl: automationUrl,
+    info: auto.info,
+    status: auto.status,
+    grants: auto.grants,
+    role,
+    account: controller.state.account,
+    chainTime: chainSeconds(),
+    scopes: roleScopes(role),
+    form: auto.form,
+    busy: auto.busy || sending,
+    message: auto.message,
+    explorer,
+    totalRequired: controller.state.project?.totalRequired,
+  });
+
+  bindAutomation(node, role);
+}
+
+function bindAutomation(node, role) {
+  node.querySelectorAll("[data-auto-scope]").forEach((box) =>
+    box.addEventListener("change", () => {
+      const bit = Number(box.dataset.autoScope);
+
+      auto.form.scopes = box.checked ? auto.form.scopes | bit : auto.form.scopes & ~bit;
+    }),
+  );
+
+  const form = node.querySelector("[data-auto-form]");
+
+  form?.querySelectorAll("input[name]").forEach((input) =>
+    input.addEventListener("input", () => {
+      auto.form[input.name] = input.value.trim();
+    }),
+  );
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const days = Number(auto.form.days || "30");
+    const maxAmount = auto.form.maxAmount || controller.state.project?.totalRequired || "";
+
+    if (!auto.form.scopes) return setAutoMessage("Choose at least one step; nothing is enabled by default.");
+    if (!(days > 0 && days <= 180)) return setAutoMessage("Validity must be between 1 and 180 days.");
+    if (!/^\d+$/.test(String(maxAmount)) || BigInt(maxAmount) <= 0n) return setAutoMessage("The amount limit must be a positive whole number of wei.");
+
+    auto.busy = true;
+    renderAutomation();
+
+    try {
+      const result = await giveConsent({
+        provider,
+        base: automationUrl,
+        chainId: networkInfo.chainId,
+        escrow: project,
+        account: controller.state.account,
+        role,
+        scopes: auto.form.scopes,
+        maxAmount,
+        expiresAt: (chainSeconds() || Math.floor(Date.now() / 1000)) + Math.floor(days * 86400),
+        email: auto.form.email,
+      });
+
+      setAutoMessage(`Enabled: ${result.scopes}. Confirm the email sent to ${result.email} to receive results.`);
+    } catch (error) {
+      setAutoMessage(`Not enabled: ${explainError(error)}`);
+    } finally {
+      auto.busy = false;
+      loadAutomation();
+    }
+  });
+
+  node.querySelector("[data-auto-revoke]")?.addEventListener("click", async () => {
+    auto.busy = true;
+    renderAutomation();
+
+    try {
+      const r = await revokeConsent({ provider, base: automationUrl, chainId: networkInfo.chainId, escrow: project, account: controller.state.account });
+
+      setAutoMessage(`Revoked. ${r.cancelledQueuedJobs} queued step(s) cancelled; ${r.alreadySignedJobsStillTracked} already-signed step(s) are tracked to their result. ${r.note}`);
+    } catch (error) {
+      setAutoMessage(`Not revoked: ${explainError(error)}`);
+    } finally {
+      auto.busy = false;
+      loadAutomation();
+    }
+  });
+
+  const grant = (maxAmount, expiresAt) =>
+    runAction("set_automation", { input: { max_amount: String(maxAmount), expires_at: String(expiresAt) } }).then(loadAutomation);
+
+  node.querySelector("[data-auto-grant]")?.addEventListener("click", () => {
+    const days = Math.min(180, Math.max(1, Number(auto.form.days || "30")));
+    const maxAmount = auto.form.maxAmount || controller.state.project?.totalRequired;
+
+    grant(maxAmount, (chainSeconds() || Math.floor(Date.now() / 1000)) + Math.floor(days * 86400) - 60);
+  });
+  node.querySelector("[data-auto-grant-revoke]")?.addEventListener("click", () => grant("0", "0"));
+}
+
+function setAutoMessage(text) {
+  auto.message = text;
+  renderAutomation();
 }
 
 /** Re-render only the recovery steppers, from chain time, every 30 s. */
@@ -1504,6 +1663,7 @@ const automaticTracking = createAutoTracker({
       }
     }
     await checkReceipts();
+    if (project && Date.now() - auto.loadedAt > 30000) await loadAutomation();
     // Do not destroy an evidence URL or other form input while typing.
     const editing = document.activeElement?.matches("input, textarea, select, [contenteditable=true]");
     if (projectRefreshPending && !sending && !editing && !projectRefreshing) {

@@ -50,6 +50,11 @@ export const BASELINE = {
     "0x33c5A0F51Ed10Ee21dC55399ce4A37D525321f99",
   ],
   gasEstimate: 16_124_432n,
+  // Deployment data of that proven transaction: the 19,125-byte packed v2
+  // artifact plus the args above. Fixed, so a larger artifact (for example
+  // the automation contract) is projected higher instead of being measured
+  // against itself.
+  txDataBytes: 19_383,
   gasPerByte: 860n, // the higher of the two measured ratios, so the projection errs high
 };
 
@@ -223,7 +228,7 @@ export function byteLength(hex) {
 /** Offline projection from the proven deployment. Guidance only. */
 export function projectGas(code, constructorArgs) {
   const size = byteLength(deployTxData(code, constructorArgs));
-  const baseline = byteLength(deployTxData(code, BASELINE.args));
+  const baseline = BASELINE.txDataBytes;
   const projected = BASELINE.gasEstimate + BigInt(size - baseline) * BASELINE.gasPerByte;
 
   return {

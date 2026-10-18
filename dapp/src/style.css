@@ -507,3 +507,10 @@ details summary { cursor: pointer; font-size: 0.78rem; font-weight: 600; color: 
   .ws-tabs button { flex: 1 1 auto; padding: 9px 10px; }
   .panel-network { gap: 12px; }
 }
+
+/* automation panel */
+#automation-panel .meta { display: block; }
+#automation-panel .ws-indent { margin: -6px 0 6px 26px; }
+#automation-panel .ws-auto-grant { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(10, 23, 48, 0.05); border: 1px solid rgba(66, 97, 140, 0.22); }
+#automation-panel .ws-auto-message { margin: 8px 0; color: var(--ink-900); }
+#automation-panel .ws-check input { width: 16px; height: 16px; }

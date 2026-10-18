@@ -164,6 +164,16 @@ export const METHODS = {
     fields: [],
     args: () => [],
   },
+  // Automation contract only (contracts/project_escrow_automation.py). The
+  // caller's own single continuation step; "0" and 0 revoke the grant.
+  set_automation: {
+    label: "Set automatic continuation",
+    fields: [
+      { name: "max_amount", label: "Largest amount allowed, in wei", kind: "amount" },
+      { name: "expires_at", label: "Expiry (chain time, seconds)", kind: "amount" },
+    ],
+    args: (index, input) => [String(input.max_amount), Number(input.expires_at)],
+  },
 };
 
 export function methodFor(action) {

@@ -152,7 +152,7 @@ export function createPanel(form, { errors = [], preview = null, estimate = null
           <div class="ledger-row"><span class="k">Allowed sources</span><span class="v">${escape(preview.args[2])}</span></div>
           <div class="ledger-row"><span class="k">Render · max revisions · continue after refund</span><span class="v">${escape(preview.args[3])} · ${escape(preview.args[4])} · ${escape(preview.args[5])}</span></div>
           <div class="ledger-row"><span class="k">Registry</span><span class="v">${preview.args[6] ? escape(preview.args[6]) : "none (no outcome reporting)"}</span></div>
-          <div class="ledger-row"><span class="k">Contract artifact</span><span class="v">${artifact ? `sha256 ${escape(artifact.sha256.slice(0, 16))}… (${escape(artifact.bytes)} bytes, verified)` : "not loaded"}</span></div>
+          <div class="ledger-row"><span class="k">Contract artifact</span><span class="v">${artifact ? `${escape(artifact.version === "automation" ? "v2 + automation v1" : "v2")} · sha256 ${escape(artifact.sha256.slice(0, 16))}… (${escape(artifact.bytes)} bytes, verified)` : "not loaded"}</span></div>
           <div class="ledger-row"><span class="k">Deployment data</span><span class="v">${escape(preview.gas.txDataBytes)} bytes</span></div>
           <div class="ledger-row"><span class="k">Projected gas (offline)</span><span class="v">${escape(preview.gas.projected.toLocaleString("en-US"))} of ${escape(OBSERVED_GAS_CAP.toLocaleString("en-US"))}</span></div>
           <div class="ledger-row"><span class="k">Live estimate (read-only)</span><span class="v">${estimate ? estimate.error ? `<span class="ws-error">${escape(estimate.error)}</span>` : `${escape(estimate.gas.toLocaleString("en-US"))} — ${estimate.fits ? "within the observed cap" : "<b>over the observed cap</b>"}` : "not run"}</span></div>
@@ -187,6 +187,13 @@ export function createPanel(form, { errors = [], preview = null, estimate = null
       </div>
       ${fieldErr("maxRevisions")}
       <label class="ws-check"><input type="checkbox" data-field="continueAfterRefund" ${form.continueAfterRefund ? "checked" : ""}/> Continue the project after a refunded milestone</label>
+      <label>Contract version
+        <select data-field="contractVersion">
+          <option value="v2" ${form.contractVersion !== "automation" ? "selected" : ""}>v2 — the proven contract (no on-chain automation grants)</option>
+          <option value="automation" ${form.contractVersion === "automation" ? "selected" : ""}>v2 + automation grants v1 — new; not yet deployed live</option>
+        </select>
+      </label>
+      <p class="meta">${form.contractVersion === "automation" ? "Adds optional grants: the worker can allow anyone to claim an approved payment (to the worker), the client can allow anyone to activate an exact deposit. Off until a party grants it. Everything else is identical to v2." : "Automation of review and deadline recovery works with either version through the optional service; payment claim and funding activation stay manual on v2."}</p>
       <label>Registry for outcome reports (optional)
         <input data-field="registry" value="${escape(form.registry)}" autocomplete="off" spellcheck="false" placeholder="leave empty for none" />
       </label>
@@ -395,4 +402,113 @@ export function activityPanel({ entries, explorer, busyIds = new Set() }) {
   return `<p class="card-title">Activity from this browser</p>
     <p class="meta">Automatically checked every 15 seconds while this tab is visible and online. Tracking resumes after reload; no transaction is resent. Recorded durably before each wallet prompt and updated from the chain. An action that is still open here cannot be sent again until it is resolved on chain.</p>
     <ul class="ws-list">${rows}</ul>`;
+}
+
+/* ------------------------------ automation ------------------------------ */
+
+const gen = (wei) => {
+  try {
+    const v = BigInt(String(wei ?? "0"));
+    const whole = v / 10n ** 18n;
+    const frac = (v % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
+
+    return `${whole}${frac ? `.${frac}` : ""} GEN`;
+  } catch {
+    return String(wei);
+  }
+};
+
+const JOB_PILL = { done: "pill-ok", failed: "pill-warn", blocked: "pill-warn", conflict: "pill-warn", cancelled: "pill-muted", obsolete: "pill-muted" };
+
+/**
+ * The optional automation panel. Everything is opt-in; nothing here is
+ * enabled by default, and the manual path above is never affected.
+ */
+export function automationPanel({ serviceUrl, info, status, grants, role, account, chainTime, scopes, form, busy, message, explorer, totalRequired }) {
+  const head = '<p class="card-title">Automation (optional)</p>';
+
+  if (!serviceUrl) {
+    return `${head}<p class="meta">No automation service is configured for this site. Every step stays available manually above.</p>`;
+  }
+
+  if (info?.error) {
+    return `${head}<p class="meta">The automation service is unreachable (${escape(info.error)}). Nothing is affected: every step stays available manually.</p>`;
+  }
+
+  const grantText = !grants
+    ? "Checking this contract…"
+    : grants.supported
+      ? "This contract supports on-chain continuation grants."
+      : "This contract has no on-chain continuation grants (older version). Review and deadline recovery can still be automated; claiming a payment and activating funding stay manual.";
+
+  const myGrant = grants?.supported && (role === "worker" ? grants.worker : role === "client" ? grants.client : null);
+  const grantActive = myGrant && BigInt(myGrant.max_amount || "0") > 0n && Number(myGrant.expires_at) > Number(chainTime || 0);
+  const grantBlock =
+    grants?.supported && (role === "worker" || role === "client")
+      ? `<div class="ws-auto-grant">
+          <p class="meta"><b>On-chain grant (${role === "worker" ? "claim my approved payments" : "activate funding after my exact deposit"})</b>:
+            ${grantActive ? `active up to ${escape(gen(myGrant.max_amount))} until ${escape(new Date(Number(myGrant.expires_at) * 1000).toISOString().slice(0, 16))} UTC` : "off"} · version ${escape(myGrant?.version ?? "0")}.
+            It lets anyone perform only that one step; the recipient and amount still come from the contract. Revoking takes effect for steps executed after the revocation; a step already executed is not undone.</p>
+          <div class="ws-actions">
+            <button class="btn btn-ghost btn-small" type="button" data-auto-grant ${busy || !account ? "disabled" : ""}>${grantActive ? "Update grant" : "Grant (one transaction)"}</button>
+            ${grantActive ? `<button class="btn btn-ghost btn-small" type="button" data-auto-grant-revoke ${busy ? "disabled" : ""}>Revoke grant (one transaction)</button>` : ""}
+          </div>
+        </div>`
+      : "";
+
+  const visible = scopes
+    .filter((s) => grants?.supported || s.bit !== 8) // activation needs the on-chain grant
+    .map((s) =>
+      s.bit === 2 && !grants?.supported
+        ? { ...s, note: "On this contract only emitting and confirming your approved payout is automated; claiming it stays manual." }
+        : s,
+    );
+  const scopeBoxes = visible
+    .map((s) => `<label class="ws-check"><input type="checkbox" data-auto-scope="${s.bit}" ${form.scopes & s.bit ? "checked" : ""}/> ${escape(s.label)}</label><p class="meta ws-indent">${escape(s.note)}</p>`)
+    .join("");
+
+  const consentForm = account
+    ? `<form data-auto-form class="ws-auto-form">
+        <p class="meta">You are the <b>${escape(role)}</b>. Choose steps separately; none is selected by default. Signing sends no transaction and costs nothing.</p>
+        ${scopeBoxes}
+        <div class="ws-row">
+          <label>Email for results <input name="email" type="email" autocomplete="email" value="${escape(form.email)}" placeholder="you@example.com" /></label>
+          <label>Valid for (days, max 180) <input name="days" inputmode="numeric" value="${escape(form.days)}" /></label>
+        </div>
+        <label>Largest amount any step may move (wei) <input name="maxAmount" inputmode="numeric" value="${escape(form.maxAmount || totalRequired || "")}" /></label>
+        <div class="ws-actions">
+          <button class="btn btn-action" type="submit" ${busy ? "disabled" : ""}>Sign and enable</button>
+          <button class="btn btn-ghost btn-small" type="button" data-auto-revoke ${busy ? "disabled" : ""}>Revoke my consent</button>
+        </div>
+      </form>`
+    : '<p class="meta">Connect a wallet to choose automation for your role.</p>';
+
+  const jobs = status?.jobs?.length
+    ? `<ul class="ws-list">${status.jobs
+        .map((j) => `<li class="ws-activity"><div><b>${escape(j.step)}(${escape((j.args || []).join(", "))})</b> <span class="pill ${JOB_PILL[j.state] || "pill-info"}">${escape(j.state)}</span></div>
+          <div class="meta">${escape(j.status)}${j.eta ? ` · ${escape(j.eta)}` : ""}${j.glTxId ? ` · <a href="${escape(explorer + "tx/" + j.glTxId)}" target="_blank" rel="noopener noreferrer">GenLayer ${escape(short(j.glTxId))}</a>` : ""}${j.verdict?.label ? ` · ${escape(j.verdict.label)}` : ""}${j.lastError ? ` · ${escape(j.lastError)}` : ""}</div>
+          <div class="meta">${escape(j.reason)}</div></li>`)
+        .join("")}</ul>`
+    : '<p class="meta">No automatic steps for this project yet.</p>';
+
+  const consents = status?.consents?.length
+    ? `<p class="meta">Consents: ${status.consents
+        .map((c) => `${escape(c.role)} · ${escape(c.scopes)} · ${c.active ? "active" : "inactive"}${c.emailVerified ? "" : " · email not confirmed yet"}`)
+        .join(" | ")}</p>`
+    : "";
+
+  const expected = status?.expected?.length
+    ? `<p class="meta">Next contract deadlines: ${status.expected.map((e) => `${escape(e.event)} (milestone ${e.milestone + 1}) at ${escape(new Date(e.at * 1000).toISOString().slice(0, 16))} UTC`).join(" · ")}</p>`
+    : "";
+
+  return `${head}
+    <p class="meta">Service ${info?.sendingEnabled ? `sends steps from operator ${escape(short(info.operator))}` : "is in tracking-only mode (it watches and emails, but sends nothing)"}. Caps: ${escape(gen(info?.limits?.maxFeePerTxWei))} per transaction, ${escape(gen(info?.limits?.dailyBudgetWei))} per day; when a cap is reached, steps wait and remain available manually.</p>
+    <p class="meta">${escape(grantText)}</p>
+    ${grantBlock}
+    ${consentForm}
+    ${message ? `<p class="meta ws-auto-message">${escape(message)}</p>` : ""}
+    ${consents}
+    ${expected}
+    ${jobs}
+    <p class="meta">Network consensus time is not shortened. A finalized step is reported only after its execution and consensus result are checked. Funding from a wallet, evidence, revisions, appeals, settlements, redirects and project terms are never automated.</p>`;
 }
