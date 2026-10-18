@@ -46,7 +46,7 @@ export function createChain({ network, rpcUrl }, injected = {}) {
       const count = Math.min(project.milestoneCount, 20);
       const milestones = await Promise.all(Array.from({ length: count }, (_, i) => readMilestone(final, escrow, i)));
       const outflows = await readOutflows(final, escrow, project.outflowCount);
-      const [chainTime, balance, grants] = await Promise.all([
+      const [chainTime, balance, grants, oneTx] = await Promise.all([
         Number(latestBlock.timestamp),
         evm.getBalance({ address: escrow }).then((wei) => ({ wei })).catch((error) => ({ wei: null, error: String(error?.shortMessage || error?.message || error) })),
         Promise.all([
@@ -55,9 +55,10 @@ export function createChain({ network, rpcUrl }, injected = {}) {
         ])
           .then(([client, worker]) => ({ client, worker }))
           .catch(() => null), // contract without automation grants: party-only steps stay manual
+        final.readContract({ address: escrow, functionName: "get_one_tx_authorizations", args: [] }).catch(() => null),
       ]);
 
-      return { finality: "final", block: String(latestBlock.number), project, milestones, outflows, chainTime, balance, grants };
+      return { oneTx, finality: "final", block: String(latestBlock.number), project, milestones, outflows, chainTime, balance, grants };
     },
 
     attempts(escrow, milestoneCount) {

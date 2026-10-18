@@ -252,6 +252,7 @@ export async function sendTracked(request, {
     expect,
     nonceBefore: String(nonceBefore),
     promptBlock: String(promptBlock),
+    enrollment: request.enrollment || null,
   });
 
   onUpdate(entry);
@@ -311,8 +312,9 @@ export async function sendTracked(request, {
 
   const sdkCall = (async () => {
     try {
-      sdkResult =
-        request.kind === "deploy"
+      sdkResult = request.fundedDeploy
+        ? await guard.request({ method: "eth_sendTransaction", params: [{ from: request.account, to: consensus.address, data: request.fundedDeploy.data, value: `0x${BigInt(request.value).toString(16)}`, gas: `0x${BigInt(request.minGas).toString(16)}` }] })
+        : request.kind === "deploy"
           ? await client.deployContract({ code: request.code, args: request.constructorArgs, leaderOnly: false })
           : await client.writeContract({
               address: request.project,

@@ -3,6 +3,8 @@
  * continuation steps queued and executed, outcomes emailed.
  */
 
+import { createOneTxEnrollment, filterOnchainConsents } from "./one-tx.js";
+
 import { randomBytes } from "node:crypto";
 
 import { immediate, nowSeconds } from "./db.js";
@@ -25,6 +27,7 @@ export const scopesText = (scopes) =>
     .join(", ");
 
 export function createService({ db, chain, account, config, transport, log = () => {}, now = nowSeconds, processId = `${process.pid}-${randomBytes(4).toString("hex")}` }) {
+  const enrollment = createOneTxEnrollment({ db, chain, config, now });
   const chainConfig = chain.chainConfig;
   const chainId = chainConfig.id;
   const explorer = `${String(chainConfig.blockExplorers?.default?.url || "").replace(/\/$/, "")}/`;
@@ -48,7 +51,7 @@ export function createService({ db, chain, account, config, transport, log = () 
   const planFresh = async (escrow) => {
     const snapshot = await chain.snapshot(escrow); // finalized state; planActions refuses anything else
 
-    return planActions(snapshot, activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role })));
+    return planActions(snapshot, filterOnchainConsents(activeConsents(escrow), snapshot).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role })));
   };
 
   const onEvent = (e) => {
@@ -94,6 +97,8 @@ export function createService({ db, chain, account, config, transport, log = () 
 
   return {
     executor,
+    watchOneTx: (body) => enrollment.add(body),
+    watchStatus: (hash) => enrollment.status(hash),
 
     async addConsent(submission) {
       const escrow = submission?.escrow;
@@ -169,6 +174,7 @@ export function createService({ db, chain, account, config, transport, log = () 
 
     /** One pass: watch, notify, plan, execute, deliver. */
     async tick() {
+      await enrollment.tick();
       const escrows = db
         .prepare("SELECT DISTINCT escrow FROM consents WHERE chain_id = ? AND revoked_at IS NULL AND expires_at > ? LIMIT ?")
         .all(chainId, now(), config.maxEscrows)
@@ -203,7 +209,7 @@ export function createService({ db, chain, account, config, transport, log = () 
           );
 
 
-          const consents = activeConsents(escrow).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role }));
+          const consents = filterOnchainConsents(activeConsents(escrow), snapshot).map((c) => ({ id: c.id, scopes: c.scopes, maxAmount: c.max_amount, role: c.role }));
 
           for (const plan of planActions(snapshot, consents)) {
             if (enqueue(db, { chainId, escrow }, plan, now())) log("info", "queued", { escrow, key: plan.key });
@@ -270,6 +276,8 @@ export function createService({ db, chain, account, config, transport, log = () 
     info() {
       return {
         chainId,
+        oneTransactionEnrollment: true,
+        mailTransport: config.mailTransport || "file",
         network: config.network,
         operator: account?.address || null,
         sendingEnabled: config.sendingEnabled && Boolean(account),

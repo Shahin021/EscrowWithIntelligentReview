@@ -2,3 +2,5 @@
 * text=auto
 # Deployed bytes are pinned by SHA-256; never convert line endings.
 dapp/public/contracts/* -text
+# Python source hashes are pinned in the browser too.
+contracts/*.py text eol=lf

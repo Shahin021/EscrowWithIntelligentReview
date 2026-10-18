@@ -1,0 +1,3 @@
+-r requirements-test.txt
+# Build-time only; deployed code uses Python stdlib zlib.
+zopfli==0.4.3

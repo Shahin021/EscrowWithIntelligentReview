@@ -487,3 +487,32 @@ describe("no wallet prompt without a durable record", () => {
     }
   });
 });
+
+describe('one-transaction funded deployment', () => {
+  it('forwards principal and constructor authorization in one wallet transaction, then only reads', async () => {
+    const { deployConsensusCall } = await import('../src/workspace/create.js');
+    const h = harness();
+    const code = new TextEncoder().encode('# test only\nclass Contract: pass\n');
+    const args = [OTHER, '[{"spec":"A work specification","amount":"1"}]', 'raw.githubusercontent.com/test/repo', 'text', 1, false, '', 0, 1800000000, 'a'.repeat(64)];
+    const call = deployConsensusCall({chain:testnetBradbury,sender:ACCOUNT,code,constructorArgs:args,validUntil:1900000000});
+    const e = await h.send({kind:'deploy', code,constructorArgs:args,value:1n,minGas:500000n,maxGas:16777216n,fundedDeploy:call,enrollment:{role:'client',email:'client@example.com'}});
+    expect(h.sent).toHaveLength(1);
+    expect(BigInt(h.sent[0].value)).toBe(1n);
+    expect(e.createdAddress.toLowerCase()).toBe(PROJECT);
+    expect(e.enrollment.role).toBe('client');
+    await advance(e,{readClient:h.readClient,consensus:CONSENSUS,journal:h.journal});
+    expect(h.sent).toHaveLength(1);
+  });
+  it('cannot replace the exact constructor call while attaching money', async () => {
+    const h = harness();
+    await expect(h.send({kind:'deploy',code:new Uint8Array([1]),constructorArgs:[],value:1n,minGas:500000n,maxGas:16777216n,fundedDeploy:{data:'0xdeadbeef'}})).rejects.toThrow();
+    expect(h.sent).toHaveLength(0);
+  });
+  it('the worker evidence and permission travel in one SDK call', async () => {
+    const h = harness();
+    const e = await h.send({functionName:'submit_once',args:['[{"url":"https://example.com/pinned"}]',1800000000,'b'.repeat(64)],enrollment:{role:'worker',email:'worker@example.com'}});
+    expect(h.sent).toHaveLength(1);
+    expect(e.verdict.ok).toBe(true);
+    expect(e.enrollment.role).toBe('worker');
+  });
+});

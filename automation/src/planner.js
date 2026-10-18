@@ -92,6 +92,12 @@ export function planActions(snapshot, consents) {
   for (const m of milestones) {
     if (!m.isActive) continue;
 
+    // The worker committed every URL in its single signed submission.
+    // No URL or notes are chosen by the service.
+    if (m.status === "AWAITING_DELIVERY" && Number(snapshot.oneTx?.deliveries_committed) > m.index && grantUsable(snapshot.grants?.worker, m.amount, now)) {
+      add(SCOPES.SETTLE, m.amount, { key: `submit_precommitted:${m.index}`, functionName: "submit_precommitted", args: [m.index], reason: "Submit the worker's immutable precommitted evidence for the next milestone." });
+    }
+
     // REVIEW: run the consensus review of evidence already submitted.
     if (m.status === "UNDER_REVIEW") {
       add(SCOPES.REVIEW, 0n, {

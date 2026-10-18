@@ -74,6 +74,10 @@ export function createApi(service, config, { log = () => {} } = {}) {
 
       if (req.method === "GET" && project) return send(200, await service.publicStatus(project[1]));
 
+      if (req.method === "POST" && path === "/v1/one-tx-watches") return send(201, service.watchOneTx(await readBody(req)));
+      const watch = path.match(/^\/v1\/one-tx-watches\/(0x[0-9a-fA-F]{64})$/);
+      if (req.method === "GET" && watch) return send(200, service.watchStatus(watch[1]));
+
       if (req.method === "POST" && path === "/v1/consents") {
         const body = await readBody(req);
 
