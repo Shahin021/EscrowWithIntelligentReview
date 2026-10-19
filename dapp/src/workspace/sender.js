@@ -253,6 +253,7 @@ export async function sendTracked(request, {
     nonceBefore: String(nonceBefore),
     promptBlock: String(promptBlock),
     enrollment: request.enrollment || null,
+    expectedRecoverySeconds: request.expectedRecoverySeconds ?? null,
   });
 
   onUpdate(entry);
@@ -278,6 +279,7 @@ export async function sendTracked(request, {
     maxGas: request.maxGas,
     expect,
     onBeforeForward: (tx) => {
+      request.assertCurrent?.();
       // Strict: throws (and the guard refuses to forward) unless durable and
       // the intent is still open (another tab may have resolved it).
       const latest = journal.get(entry.id);

@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.sqlite*
+compose.override.yaml
+state/
+outbox/

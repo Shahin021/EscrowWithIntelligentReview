@@ -516,3 +516,14 @@ describe('one-transaction funded deployment', () => {
     expect(e.enrollment.role).toBe('worker');
   });
 });
+
+
+it("rechecks the form at the final wallet boundary and does not forward stale consent", async () => {
+  const h=harness();
+  const assertCurrent=vi.fn(()=>{throw new Error("Delivery form changed before wallet prompt");});
+  await expect(h.send({assertCurrent})).rejects.toThrow(/form changed/);
+  expect(assertCurrent).toHaveBeenCalled();
+  expect(h.sent).toHaveLength(0);
+  expect(h.journal.list()[0].phase).toBe(PHASE_NOT_SENT);
+  expect(h.journal.list()[0].forwardedAt).toBeUndefined();
+});

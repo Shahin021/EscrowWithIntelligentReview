@@ -173,6 +173,30 @@ describe("browser deployment through the real SDK and the guard", () => {
     expect(deployTxData(CODE, r.args).length).toBeGreaterThan(CODE.length * 2);
   });
 
+  it("keeps the chosen recovery window with the creation record and checks it after finality, read-only", async () => {
+    const { verifyRecoveryWindow, recoveryCheckText } = await import("../src/workspace/one-tx.js");
+    const h = deployHarness();
+    const r = validateProject(form());
+    const entry = await sendTracked({ kind: "deploy", network: "testnetBradbury", chainId: 4221, account: ACCOUNT,
+      code: CODE, constructorArgs: r.args, minGas: 15_000_000n, maxGas: OBSERVED_GAS_CAP, label: "Create project", expectedRecoverySeconds: 604800, enrollment: { role: "client", email: "client@example.com", emailSalt: "ab".repeat(32) } },
+      { client: h.client, guard: h.guard, journal: h.journal, readClient: h.readClient, consensus: h.CONSENSUS, sleep: async () => {}, polls: 2, intervalMs: 1 });
+    expect(entry.expectedRecoverySeconds).toBe(604800);
+    expect(h.journal.list().find((e) => e.id === entry.id).expectedRecoverySeconds).toBe(604800);
+    expect(h.journal.list().find((e) => e.id === entry.id).enrollment.emailSalt).toBe("ab".repeat(32)); // durable before the wallet opened
+    let onChain = "259200";
+    const readContract = vi.fn(async ({ address, functionName, transactionHashVariant }) => {
+      expect([address.toLowerCase(), functionName, transactionHashVariant]).toEqual([h.CREATED.toLowerCase(), "get_evidence_recovery_seconds", "latest-final"]);
+      return onChain;
+    });
+    const checked = await verifyRecoveryWindow(entry, { readClient: { readContract }, journal: h.journal });
+    expect(checked.recoveryCheck).toMatchObject({ state: "mismatch", expected: "604800", onChain: "259200" });
+    expect(recoveryCheckText(checked)).toMatch(/MISMATCH.*168 hours.*72 hours.*Do not resend/);
+    onChain = "604800";
+    await verifyRecoveryWindow(h.journal.list().find((e) => e.id === entry.id), { readClient: { readContract }, journal: h.journal });
+    expect(readContract).toHaveBeenCalledTimes(1); // a mismatch is final: the window is immutable
+    expect(h.sent).toHaveLength(1); // the check never sends anything
+  });
+
   it("refuses to sign if the code differs from the reviewed artifact", async () => {
     const h = deployHarness();
     const r = validateProject(form());
