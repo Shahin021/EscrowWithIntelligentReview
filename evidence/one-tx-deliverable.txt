@@ -1,0 +1,6 @@
+escrow workspace v2 test.
+
+This plain text document is the deliverable for the escrow automation test.
+It contains the required phrase: escrow workspace v2 test.
+The document is published at an immutable Git commit URL so reviewers can retrieve the same evidence.
+Acceptance requires a readable plain text document containing the required phrase.
