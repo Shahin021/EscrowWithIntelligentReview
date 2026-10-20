@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1018"><meta name="description" content="Create, deliver and track milestone projects on GenLayer Bradbury. One transaction per party, with authorized background continuation.">
+<title>Escrow Workspace · Intelligent review</title>
+<link rel="stylesheet" href="/src/one-tx-style.css">
+</head>
+<body>
+<aside class="sidebar">
+<a class="brand" href="./one-tx.html" aria-label="Escrow workspace home"><span class="brand-symbol" aria-hidden="true">e</span><span>escrow<span class="brand-sub">INTELLIGENT REVIEW</span></span></a>
+<div class="sidebar-label">WORKSPACE</div>
+<nav class="workspace-tabs" aria-label="Workspace">
+<button type="button" data-tab="tracking" aria-pressed="true"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></span>My projects<span class="nav-arrow" aria-hidden="true">↗</span></button>
+<button type="button" data-tab="client" aria-pressed="false"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg></span>Create project</button>
+<button type="button" data-tab="worker" aria-pressed="false"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 17V4m-5 5 5-5 5 5M4 16v4h16v-4"/></svg></span>Deliver work</button>
+</nav>
+<div class="sidebar-guide"><span class="sidebar-label">HOW IT WORKS</span><ol><li><span>01</span>Agree on the work</li><li><span>02</span>Submit your evidence</li><li><span>03</span>Track review & payment</li></ol><p>One transaction from each party. Authorized follow-up runs in the background.</p></div>
+<div class="sidebar-bottom"><span class="network-dot"></span> Bradbury testnet <span class="test-tag">TEST</span><p>Use small test amounts.</p></div>
+</aside>
+<div class="app-shell">
+<header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="page-label">My projects</strong></div><div class="header-wallet"><button id="header-change-account" class="button-quiet" hidden>Change account</button><button id="connect">Connect wallet</button></div></header>
+<main>
+<div class="workspace-heading"><div><span class="eyebrow">POWERED BY GENLAYER</span><h1>Work agreed.<br><span>Progress visible.</span></h1><p>Clear milestones, intelligent review and a record of every step.</p></div><div class="hero-seal"><span class="seal-mark" aria-hidden="true">↗</span><span>Built around<br><strong>the agreement.</strong></span></div></div>
+<div class="connection-strip"><p id="service" role="status">Checking background service…</p><p id="account"></p></div>
+<p id="message" class="notice" role="status"></p>
+<section data-panel="tracking" id="project-tracking" aria-label="Saved projects and tracking"></section>
+<section data-panel="client" hidden>
+<div class="section-heading"><div><span class="eyebrow">01 / SET THE AGREEMENT</span><h2>Create a project</h2><p>Define the work and the fixed worker. Review the total before your wallet opens.</p></div><span class="outline-tag">ONE CLIENT TRANSACTION</span></div>
+<div class="form-layout"><div class="form-body">
+<div class="form-section"><h3><span class="step-number">1</span> People & notifications</h3><div class="row"><div><label for="worker">Worker wallet address</label><input id="worker" placeholder="0x…" autocomplete="off" spellcheck="false"><small>The account that will submit the work and receive payment.</small></div><div><label for="client-email">Your notification email</label><input id="client-email" type="email" placeholder="you@example.com" autocomplete="email"><small>Confirm your email to receive project updates.</small></div></div></div>
+<div class="form-section"><h3><span class="step-number">2</span> Milestones</h3><p class="field-hint">Describe a specific deliverable. Keep terms concise: larger projects may exceed the network deployment limit.</p><div id="milestone-builder"></div><textarea id="milestones" hidden>[{"spec":"Provide a readable plain text document of at least 40 characters containing the exact phrase: escrow workspace v2 test.","amount":"1","deliveryDays":"1"}]</textarea></div>
+<div class="form-section"><h3><span class="step-number">3</span> Evidence source</h3><label for="sources">Allowed GitHub repository</label><input id="sources" value="raw.githubusercontent.com/Shahin021/EscrowWithIntelligentReview" spellcheck="false"><small>Evidence must use an immutable, full commit URL within this source.</small></div>
+<div class="form-section"><h3><span class="step-number">4</span> Evidence recovery</h3><label for="recovery-hours">Recovery window · hours</label><input id="recovery-hours" type="number" inputmode="numeric" min="72" max="720" step="1" value="72"><small id="recovery-hint">If submitted evidence stays unreviewable, the milestone principal can be recovered once this window passes. 72 to 720 hours (3 to 30 days). Fixed at creation and cannot be changed later.</small></div>
+<label class="check-row"><input id="terms" type="checkbox"><span>I accept the project terms and the principal shown in the preview.</span></label>
+<p id="client-message" class="notice" role="status"></p>
+<div class="action-bar"><button id="preview">Estimate and preview <span aria-hidden="true">→</span></button><button id="create" disabled>Create + fund + authorize · one transaction</button></div>
+<div id="preview-summary" class="preview-summary" hidden></div><details class="technical-inline"><summary>Full deployment preview</summary><pre id="preview-result"></pre></details>
+</div><aside class="form-aside"><span class="eyebrow">YOUR PROJECT, IN THREE STEPS</span><h3>Agree once.<br>Follow every step.</h3><p>You create and fund the project. Your worker submits all evidence URLs once. The operator handles the authorized technical steps.</p><dl><div><dt>Reviews</dt><dd>One per milestone</dd></div><div><dt>Evidence recovery</dt><dd id="aside-recovery">72 hours (3 days)</dd></div><div><dt>Authorization</dt><dd>30 days</dd></div></dl><p class="small-print">Network consensus takes time. Rejection keeps the appeal window; unavailable evidence keeps its recovery window. Appeals and replacement evidence require a new transaction.</p></aside></div>
+</section>
+<section data-panel="worker" id="worker-form" hidden>
+<div class="section-heading"><div><span class="eyebrow">02 / SUBMIT THE WORK</span><h2>Deliver your work</h2><p>Read the agreement, choose the assigned worker account and submit your evidence once.</p></div><span class="outline-tag">ONE WORKER TRANSACTION</span></div>
+<div class="wallet-step"><div><span class="eyebrow">WORKER ACCOUNT</span><p id="worker-wallet-status" role="status">No worker account checked yet.</p></div><div><button type="button" id="worker-connect">Connect worker wallet</button><button type="button" id="change-account" class="button-quiet" hidden>Change account</button></div></div>
+<div class="project-lookup"><div><label for="project">Project contract address</label><input id="project" placeholder="0x…" spellcheck="false"><small>This is the project contract, not your wallet address.</small></div><button id="load-project">Read project terms</button></div>
+<div id="worker-summary"></div><details class="technical-inline"><summary>Full contract terms</summary><pre id="worker-terms"></pre></details>
+<div class="form-section"><h3>Evidence for each milestone</h3><p class="field-hint">Use readable plain text with at least 40 characters. Paste the raw GitHub URL containing the full 40-character commit.</p><div id="delivery-builder"></div><textarea id="deliveries" hidden>[]</textarea></div>
+<label for="worker-email">Your notification email</label><input id="worker-email" type="email" placeholder="you@example.com" autocomplete="email">
+<label class="check-row"><input id="worker-accept" type="checkbox"><span>I reviewed this project and authorize review, payment to my fixed address, recovery and closure.</span></label>
+<p class="small-print">All milestone URLs are committed upfront. Later milestones are submitted by the service as they become active. Only a salted commitment of your email is stored on chain; the random value stays in this browser and with the service, which stores your email.</p>
+<p id="worker-message" class="notice" role="status"></p><div class="action-bar"><button id="submit" disabled>Submit evidence + authorize · one transaction</button></div>
+</section>
+<details class="test-note"><summary>About this testnet workspace</summary><p>This workspace uses GenLayer Bradbury. Testnet GEN has no promised value. Each party submits one transaction for the normal path; the operator executes authorized follow-up. Keep this page open until “Background tracking recorded”. After that, continuation requires the service to remain online. Revisions and appeals are separate decisions.</p></details>
+<details class="technical"><summary>Transaction diagnostics</summary><pre id="progress">No transaction sent from this page.</pre></details>
+<footer><span>ESCROW / INTELLIGENT REVIEW</span><span>Agreements on chain. Evidence in context.</span></footer>
+</main>
+</div>
+<script type="module" src="/src/one-tx-main.js"></script>
+</body></html>

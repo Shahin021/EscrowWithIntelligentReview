@@ -4,6 +4,36 @@
 
 # EscrowWithIntelligentReview
 
+## Public automation release (October 2026)
+
+The full path has been run and finalized successfully on GenLayer Bradbury:
+
+- creating and funding a project;
+- delivering evidence;
+- automatic review, payment and project closure.
+
+Real email delivery and receipt, and address verification for both parties,
+have also been tested. The public site is live at https://escrow.dns27.com/.
+
+- **Project:** `0xc0B6A4Fa379D1006A6081Ff82FeF74c281844185`, finally `CLOSED`,
+  with its milestone `RELEASED`: funded 1 wei, released 1 wei, locked 0 wei.
+- **GenLayer transaction IDs of the automatic steps:**
+  - `resolve`: `0x3711b649…15fa01`
+  - `claim_payment`: `0xda751d1b…87acc6f`
+  - `confirm_outflow`: `0x245cca7e…1cef5f`
+  - `close_project`: `0xb56679fa…564cca`
+
+  Full IDs are in [docs/PUBLIC_AUTOMATION_RELEASE.md](docs/PUBLIC_AUTOMATION_RELEASE.md).
+- **One transaction per party:** the client creates, funds and authorizes; the
+  worker commits all evidence and authorizes. A background service performs
+  the authorized follow-up after each step finalizes.
+- **Hosting, operator key, SMTP and updates:** see
+  [docs/PUBLIC_WORKSPACE.md](docs/PUBLIC_WORKSPACE.md) and
+  [deploy/public/update](deploy/public/update/README.md).
+
+The sections below describe the original Intelligent Contracts submission and
+its accepted evidence, which are unchanged.
+
 A reusable GenLayer Intelligent Contract for evidence-grounded escrow.
 
 Instead of releasing payment based only on a worker's description of work,

@@ -4,6 +4,6 @@ import { defineConfig } from "vite";
 // (/<repo>/) as well as at a domain root, without hardcoding the repo name.
 export default defineConfig({
   base: "./",
-  build: { outDir: "dist", emptyOutDir: true },
+  build: { outDir: "dist", emptyOutDir: true, rolldownOptions: { input: { main: "index.html", oneTx: "one-tx.html" } } },
   test: { environment: "node", include: ["test/**/*.test.js"] },
 });

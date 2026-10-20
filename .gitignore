@@ -9,3 +9,7 @@ artifacts/
 .escrow_*_snapshot.json
 .escrow_*_tx
 escrow_contract_before_claim_fix.py
+# Dedicated operator and background state must stay outside version control.
+operator-private.key
+automation.sqlite*
+mail-outbox/

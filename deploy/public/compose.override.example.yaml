@@ -1,0 +1,11 @@
+# Copy to compose.override.yaml on the host (never commit the copy).
+# Docker Compose merges it automatically after compose.yaml; the update
+# installer keeps it in every command. Replace the path with the real absolute
+# location of the dedicated operator key, outside the repository, readable by
+# container UID 1000 only.
+services:
+  service:
+    environment:
+      OPERATOR_KEY_FILE: /run/secrets/operator_key
+    volumes:
+      - /absolute/path/outside/repository/operator-private.key:/run/secrets/operator_key:ro

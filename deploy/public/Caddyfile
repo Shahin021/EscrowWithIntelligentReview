@@ -1,0 +1,20 @@
+{$ESCROW_DOMAIN} {
+    encode gzip zstd
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+    handle_path /api/* {
+        reverse_proxy service:8790
+    }
+    handle {
+        root * /srv
+        @home path /
+        rewrite @home /one-tx.html
+        @html path *.html /
+        header @html Cache-Control "no-cache"
+        file_server
+    }
+}

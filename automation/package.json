@@ -1,0 +1,24 @@
+{
+  "name": "escrow-automation-service",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Optional background continuation and email notifications for GenLayer milestone escrows. Off by default.",
+  "bin": {
+    "escrow-automation": "bin/escrow-automation.js"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning bin/escrow-automation.js start",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "genlayer-js": "1.1.8",
+    "viem": "2.57.2"
+  },
+  "optionalDependencies": {
+    "nodemailer": "10.0.14"
+  }
+}

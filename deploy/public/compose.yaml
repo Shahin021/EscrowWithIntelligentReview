@@ -1,0 +1,52 @@
+services:
+  service:
+    build:
+      context: ../..
+      dockerfile: deploy/public/Dockerfile
+      target: service
+    restart: unless-stopped
+    init: true
+    environment:
+      GENLAYER_NETWORK: testnetBradbury
+      AUTOMATION_HOST: 0.0.0.0
+      AUTOMATION_PORT: "8790"
+      AUTOMATION_DB: /data/automation.sqlite
+      AUTOMATION_PUBLIC_URL: https://${ESCROW_DOMAIN:?Set ESCROW_DOMAIN}/api
+      AUTOMATION_SITE_URL: https://${ESCROW_DOMAIN}/one-tx.html
+      AUTOMATION_ALLOWED_ORIGINS: https://${ESCROW_DOMAIN}
+      AUTOMATION_SENDING: ${AUTOMATION_SENDING:-off}
+      OPERATOR_KEY_FILE: ${OPERATOR_KEY_FILE:-}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-file}
+      MAIL_OUTBOX_DIR: /data/outbox
+      MAIL_FROM: ${MAIL_FROM:-Escrow <no-reply@localhost>}
+      SMTP_URL: ${SMTP_URL:-}
+    volumes:
+      - escrow_state:/data
+    # Enable only after providing a dedicated operator key outside this repo.
+    # secrets:
+    #   - operator_key
+    expose:
+      - "8790"
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/public/Dockerfile
+      target: web
+    restart: unless-stopped
+    environment:
+      ESCROW_DOMAIN: ${ESCROW_DOMAIN:?Set ESCROW_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - service
+volumes:
+  escrow_state:
+  caddy_data:
+  caddy_config:
+# secrets:
+#   operator_key:
+#     file: ${OPERATOR_KEY_PATH:?Set an absolute external key path}
